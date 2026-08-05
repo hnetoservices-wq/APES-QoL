@@ -597,7 +597,7 @@
       sectionSelect.innerHTML = getTagTeamSections()
         .map(
           (section) =>
-            `<option value="${section.id}">` + `${section.id} â ${section.position}` + `</option>`,
+            `<option value="${section.id}">` + `${section.id} — ${section.position}` + `</option>`,
         )
         .join("");
 
@@ -617,8 +617,8 @@
     if (setupSummary) {
       setupSummary.textContent =
         tagTeamConfig.enabled && selectedSection
-          ? `Section ${selectedSection.id} Â· ` +
-            `${selectedSection.position} Â· ` +
+          ? `Section ${selectedSection.id} · ` +
+            `${selectedSection.position} · ` +
             `${selectedSection.name}`
           : "Manual shared scan sections";
     }
@@ -1094,7 +1094,7 @@
   function formatKingdom(kingdomId) {
     const parsed = Number(kingdomId);
 
-    return Number.isFinite(parsed) && parsed > 0 ? `#${parsed}` : "â";
+    return Number.isFinite(parsed) && parsed > 0 ? `#${parsed}` : "—";
   }
 
   function formatLastSeen(timestamp) {
@@ -1442,9 +1442,9 @@
 
     if (announce) {
       const detail = record.fieldCombination
-        ? ` â ${record.fieldCombination}`
+        ? ` — ${record.fieldCombination}`
         : record.tileType === "oasis"
-          ? ` â ${formatBonus(record.bonus)}`
+          ? ` — ${formatBonus(record.bonus)}`
           : "";
 
       setStatus(
@@ -1506,9 +1506,9 @@
 
     setStatus(
       `${isNew ? "Saved" : "Updated"} ` +
-        `${formatCoordinates(record)} â ` +
+        `${formatCoordinates(record)} — ` +
         `${formatFieldDistribution(record)}` +
-        `${record.isNatar ? " â Natarian village" : ""}.`,
+        `${record.isNatar ? " — Natarian village" : ""}.`,
     );
   }
 
@@ -1659,7 +1659,7 @@
 
     setStatus(
       `${isNew ? "Saved" : "Updated"} ` +
-        `${formatCoordinates(record)} â ` +
+        `${formatCoordinates(record)} — ` +
         `${formatBonus(record.bonus)}.`,
     );
   }
@@ -2886,7 +2886,7 @@
               ${formatBonus(oasis.bonus)}
             </td>
 
-            <td>â</td>
+            <td>—</td>
 
             <td>
               ${formatKingdom(oasis.kingdomId)}
@@ -2954,7 +2954,7 @@
               data-id="${cropper.id}"
               title="Show the selected oasis combination"
             >
-              ${isExpanded ? "â¾" : "â¸"}
+              ${isExpanded ? "▾" : "▸"}
               ${selectedCount} used /
               ${nearbyCount} nearby
             </span>
@@ -3045,15 +3045,15 @@
       .map((entry) => {
         if (entry.resultType === "oasis") {
           return (
-            `${formatCoordinates(entry.source)} â ` + "Oasis â " + `${formatBonus(entry.bonus)}`
+            `${formatCoordinates(entry.source)} — ` + "Oasis — " + `${formatBonus(entry.bonus)}`
           );
         }
 
         return (
-          `${formatCoordinates(entry.source)} â ` +
-          `${formatFieldDistribution(entry.source)} â ` +
+          `${formatCoordinates(entry.source)} — ` +
+          `${formatFieldDistribution(entry.source)} — ` +
           `${formatBonus(entry.bonus)}` +
-          `${entry.source.isNatar ? " â Conquer Natars" : ""}`
+          `${entry.source.isNatar ? " — Conquer Natars" : ""}`
         );
       })
       .join("\n");
@@ -4920,7 +4920,7 @@
                 class="qol-tag-team-area"
                 title="Shared scan boundaries and border overlap"
               >
-                X -59â¦59 Â· Y -59â¦59 Â· 1 overlap
+                X -59…59 · Y -59…59 · 1 overlap
               </div>
 
               <div

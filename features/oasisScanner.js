@@ -597,7 +597,7 @@
       sectionSelect.innerHTML = getTagTeamSections()
         .map(
           (section) =>
-            `<option value="${section.id}">` + `${section.id} — ${section.position}` + `</option>`,
+            `<option value="${section.id}">` + `${section.id} â ${section.position}` + `</option>`,
         )
         .join("");
 
@@ -617,8 +617,8 @@
     if (setupSummary) {
       setupSummary.textContent =
         tagTeamConfig.enabled && selectedSection
-          ? `Section ${selectedSection.id} · ` +
-            `${selectedSection.position} · ` +
+          ? `Section ${selectedSection.id} Â· ` +
+            `${selectedSection.position} Â· ` +
             `${selectedSection.name}`
           : "Manual shared scan sections";
     }
@@ -1094,7 +1094,7 @@
   function formatKingdom(kingdomId) {
     const parsed = Number(kingdomId);
 
-    return Number.isFinite(parsed) && parsed > 0 ? `#${parsed}` : "—";
+    return Number.isFinite(parsed) && parsed > 0 ? `#${parsed}` : "â";
   }
 
   function formatLastSeen(timestamp) {
@@ -1373,6 +1373,56 @@
     };
   }
 
+  function saveHoveredTileMarker(coordinates, tileInformation) {
+    if (!coordinates) {
+      return;
+    }
+
+    const id = `${coordinates.x}|${coordinates.y}`;
+    const existing = savedTiles[id];
+
+    if (existing) {
+      // Keep Tag Team progress tied to the current manual hover without
+      // repeatedly writing the same tile to local storage on mouse movement.
+      recordTagTeamScan(existing);
+      return;
+    }
+
+    const settlementStatus = getSettlementTileStatus(tileInformation);
+
+    /*
+     * A tooltip does not expose field data for every map tile.  It still means
+     * the player deliberately hovered that coordinate, so store it as scanned
+     * immediately.  A later oasis/village parser pass enriches this marker
+     * without losing its scanned state.
+     */
+    saveTileRecord(
+      {
+        ...(existing || {}),
+        id,
+        x: coordinates.x,
+        y: coordinates.y,
+        tileType:
+          existing?.tileType ||
+          (isOasisTooltip(tileInformation)
+            ? "oasis"
+            : settlementStatus.isNatar ||
+                tileInformation?.querySelector(".villageName, .playerName, .owner")
+              ? "settlement"
+              : "terrain"),
+        status:
+          existing?.status ||
+          (settlementStatus.isNatar
+            ? "natarian"
+            : settlementStatus.type === "occupied"
+              ? "occupied"
+              : "scanned"),
+        lastSeen: Date.now(),
+      },
+      false,
+    );
+  }
+
   function saveTileRecord(record, announce = true) {
     if (!record?.id) {
       return;
@@ -1392,9 +1442,9 @@
 
     if (announce) {
       const detail = record.fieldCombination
-        ? ` — ${record.fieldCombination}`
+        ? ` â ${record.fieldCombination}`
         : record.tileType === "oasis"
-          ? ` — ${formatBonus(record.bonus)}`
+          ? ` â ${formatBonus(record.bonus)}`
           : "";
 
       setStatus(
@@ -1456,9 +1506,9 @@
 
     setStatus(
       `${isNew ? "Saved" : "Updated"} ` +
-        `${formatCoordinates(record)} — ` +
+        `${formatCoordinates(record)} â ` +
         `${formatFieldDistribution(record)}` +
-        `${record.isNatar ? " — Natarian village" : ""}.`,
+        `${record.isNatar ? " â Natarian village" : ""}.`,
     );
   }
 
@@ -1609,7 +1659,7 @@
 
     setStatus(
       `${isNew ? "Saved" : "Updated"} ` +
-        `${formatCoordinates(record)} — ` +
+        `${formatCoordinates(record)} â ` +
         `${formatBonus(record.bonus)}.`,
     );
   }
@@ -1634,6 +1684,10 @@
     }
 
     rememberHoveredCoordinates(coordinates);
+
+    // Count every hovered coordinate, including wilderness, empty terrain,
+    // settled non-cropper villages, and tiles whose detailed data is hidden.
+    saveHoveredTileMarker(coordinates, tileInformation);
 
     if (isOasisTooltip(tileInformation)) {
       const bonus = readOasisBonus(tileInformation);
@@ -1663,15 +1717,27 @@
       return;
     }
 
-    const distribution = readResourceDistribution(tileInformation);
+    let distribution = readResourceDistribution(tileInformation);
+
+    const status = getSettlementTileStatus(tileInformation);
+
+    // Natars are always 1/1/1/15. Some Natar tooltips do not render the four
+    // resource-field icons, so do not depend on the DOM distribution to count
+    // them as 15c croppers.
+    if (status.isNatar) {
+      distribution = {
+        wood: 1,
+        clay: 1,
+        iron: 1,
+        crop: 15,
+      };
+    }
 
     if (!distribution) {
       lastTooltipSignature = `${coordinates.x}|` + `${coordinates.y}|` + "unreadable";
 
       return;
     }
-
-    const status = getSettlementTileStatus(tileInformation);
 
     const signature = buildTooltipSignature("settlement", coordinates, [
       distribution.wood,
@@ -2820,7 +2886,7 @@
               ${formatBonus(oasis.bonus)}
             </td>
 
-            <td>—</td>
+            <td>â</td>
 
             <td>
               ${formatKingdom(oasis.kingdomId)}
@@ -2888,7 +2954,7 @@
               data-id="${cropper.id}"
               title="Show the selected oasis combination"
             >
-              ${isExpanded ? "▾" : "▸"}
+              ${isExpanded ? "â¾" : "â¸"}
               ${selectedCount} used /
               ${nearbyCount} nearby
             </span>
@@ -2979,15 +3045,15 @@
       .map((entry) => {
         if (entry.resultType === "oasis") {
           return (
-            `${formatCoordinates(entry.source)} — ` + "Oasis — " + `${formatBonus(entry.bonus)}`
+            `${formatCoordinates(entry.source)} â ` + "Oasis â " + `${formatBonus(entry.bonus)}`
           );
         }
 
         return (
-          `${formatCoordinates(entry.source)} — ` +
-          `${formatFieldDistribution(entry.source)} — ` +
+          `${formatCoordinates(entry.source)} â ` +
+          `${formatFieldDistribution(entry.source)} â ` +
           `${formatBonus(entry.bonus)}` +
-          `${entry.source.isNatar ? " — Conquer Natars" : ""}`
+          `${entry.source.isNatar ? " â Conquer Natars" : ""}`
         );
       })
       .join("\n");
@@ -4854,7 +4920,7 @@
                 class="qol-tag-team-area"
                 title="Shared scan boundaries and border overlap"
               >
-                X -59…59 · Y -59…59 · 1 overlap
+                X -59â¦59 Â· Y -59â¦59 Â· 1 overlap
               </div>
 
               <div

@@ -930,34 +930,44 @@
     function injectProfileWatchlistButton() {
         if (!isWatchlistEnabled()) return;
 
-        const headers = document.querySelectorAll('.contentBoxHeader');
-        headers.forEach(header => {
-            const text = header.textContent || '';
-            if (text.includes('Description') && !header.querySelector('.qol-wl-profile-wrapper')) {
-                const wrapper = document.createElement('span');
-                wrapper.className = 'qol-wl-profile-wrapper';
-                wrapper.style.cssText = 'display: inline-flex; align-items: center; vertical-align: middle; position: relative;';
-
-                const btn = document.createElement('div');
-                btn.className = 'qol-wl-profile-btn';
-                btn.innerHTML = `<span>Add Profile to Watchlist</span> <span style="font-size:9px;">▼</span>`;
-
-                btn.addEventListener('click', (e) => {
-                    e.stopPropagation();
-                    e.preventDefault();
-                    toggleWatchlistDropdown(btn);
-                });
-
-                wrapper.appendChild(btn);
-
-                const editIcon = header.querySelector('.action_edit_small_flat_black, .headerButton');
-                if (editIcon) {
-                    header.insertBefore(wrapper, editIcon);
-                } else {
-                    header.appendChild(wrapper);
-                }
+        // Remove any watchlist buttons that were injected into non-player
+        // description panels by older versions of the feature.
+        document.querySelectorAll('.qol-wl-profile-wrapper').forEach(wrapper => {
+            if (!wrapper.closest('.contentBox.playerDescription')) {
+                wrapper.remove();
             }
         });
+
+        // Only the player's profile description should get the watchlist button.
+        const header = document.querySelector(
+            '.contentBox.playerDescription > .contentBoxHeader'
+        );
+
+        if (!header) return;
+        if (header.querySelector('.qol-wl-profile-wrapper')) return;
+
+        const wrapper = document.createElement('span');
+        wrapper.className = 'qol-wl-profile-wrapper';
+        wrapper.style.cssText = 'display: inline-flex; align-items: center; vertical-align: middle; position: relative;';
+
+        const btn = document.createElement('div');
+        btn.className = 'qol-wl-profile-btn';
+        btn.innerHTML = `<span>Add Profile to Watchlist</span> <span style="font-size:9px;">▼</span>`;
+
+        btn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            e.preventDefault();
+            toggleWatchlistDropdown(btn);
+        });
+
+        wrapper.appendChild(btn);
+
+        const editIcon = header.querySelector('.action_edit_small_flat_black, .headerButton');
+        if (editIcon) {
+            header.insertBefore(wrapper, editIcon);
+        } else {
+            header.appendChild(wrapper);
+        }
     }
 
     async function updateCurrentWatchlist() {

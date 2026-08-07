@@ -14,11 +14,26 @@ function isUserTyping() {
     ));
 }
 
+function hasModifierKey(event) {
+    return (
+        event.ctrlKey ||
+        event.altKey ||
+        event.metaKey ||
+        event.shiftKey
+    );
+}
+
 function initializeKeybinds() {
     console.log('Travian QoL Extension: Modular Keybinds Initialized.');
 
     window.addEventListener('keydown', (event) => {
         if (isUserTyping()) {
+            return;
+        }
+
+        // Never interfere with browser or operating-system shortcuts.
+        // Examples: Ctrl/Cmd+C, Ctrl/Cmd+V, Ctrl/Cmd+F and Ctrl/Cmd+Z.
+        if (hasModifierKey(event)) {
             return;
         }
 
@@ -72,6 +87,10 @@ function initializeKeybinds() {
 
     window.addEventListener('keyup', (event) => {
         if (isUserTyping()) {
+            return;
+        }
+
+        if (hasModifierKey(event)) {
             return;
         }
 

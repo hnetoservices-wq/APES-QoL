@@ -2,12 +2,15 @@
  * APES QoL Extension
  * Module: Culture Point Manager
  *
- * - Opens as a normal APES toolbar panel.
- * - Scanning only starts when the user presses "Scan CP".
- * - Reads current/target CP from Main Building location 27.
- * - Skips city villages until a normal village is found.
- * - Opens Villages Overview -> Culture Points and reads total CP/day.
- * - Celebrations are intentionally not included yet.
+ * One unified scan:
+ * 1. Reads current/target CP from Main Building location 27.
+ * 2. Skips city villages until a normal village is found.
+ * 3. Reads total CP/day from Villages Overview -> Culture Points.
+ * 4. Calculates the ETA for the next CP target.
+ * 5. Scans every village for Town Hall (buildingId24), level and location.
+ * 6. Restores the village/page where the user started.
+ *
+ * Celebrations are intentionally not included yet.
  */
 
 (function initCpManagerModule() {
@@ -18,7 +21,9 @@
     const TOGGLE_ID = 'qol-cp-toggle-btn';
     const STYLE_ID = 'qol-cp-manager-styles';
     const MENU_CHECKBOX_ID = 'qol-chk-cp-manager';
-    const BUILDING_LOCATION = 27;
+
+    const MAIN_BUILDING_LOCATION = 27;
+    const TOWN_HALL_BUILDING_ID = 24;
     const MAX_VILLAGE_HOPS = 100;
 
     let isScanning = false;
@@ -53,6 +58,74 @@
             .replace(/>/g, '&gt;')
             .replace(/"/g, '&quot;')
             .replace(/'/g, '&#039;');
+    }
+
+    function getOrdinalSuffix(day) {
+        const remainder100 = day % 100;
+
+        if (remainder100 >= 11 && remainder100 <= 13) {
+            return 'th';
+        }
+
+        switch (day % 10) {
+            case 1:
+                return 'st';
+            case 2:
+                return 'nd';
+            case 3:
+                return 'rd';
+            default:
+                return 'th';
+        }
+    }
+
+    function formatTargetDate(date) {
+        const day = date.getDate();
+        const month = date.toLocaleString('en-GB', { month: 'long' });
+        const hours = String(date.getHours()).padStart(2, '0');
+        const minutes = String(date.getMinutes()).padStart(2, '0');
+
+        return `${day}${getOrdinalSuffix(day)} ${month}, at ${hours}h${minutes}m`;
+    }
+
+    function buildPrediction(current, target, cpPerDay) {
+        const remaining = Math.max(0, target - current);
+
+        if (remaining <= 0) {
+            return {
+                text: 'Next CP target reached',
+                targetDate: null,
+                exactMinutes: 0
+            };
+        }
+
+        if (!Number.isFinite(cpPerDay) || cpPerDay <= 0) {
+            return {
+                text: 'Next CP estimate unavailable',
+                targetDate: null,
+                exactMinutes: null
+            };
+        }
+
+        const exactMinutes = Math.max(
+            1,
+            Math.ceil((remaining / cpPerDay) * 24 * 60)
+        );
+
+        const days = Math.floor(exactMinutes / (24 * 60));
+        const hours = Math.floor((exactMinutes % (24 * 60)) / 60);
+        const targetDate = new Date(Date.now() + (exactMinutes * 60 * 1000));
+
+        const dayLabel = days === 1 ? 'day' : 'days';
+        const hourLabel = hours === 1 ? 'hour' : 'hours';
+
+        return {
+            text:
+                `Next CP in ${days} ${dayLabel}, ${hours} ${hourLabel} ` +
+                `on ${formatTargetDate(targetDate)}`,
+            targetDate,
+            exactMinutes
+        };
     }
 
     function injectStyles() {
@@ -120,7 +193,7 @@
                 flex-direction: column !important;
                 width: 450px !important;
                 max-width: 94vw !important;
-                min-height: 250px !important;
+                max-height: 88vh !important;
                 margin: 0 !important;
                 padding: 0 !important;
                 border: 3px solid #634d31 !important;
@@ -143,6 +216,7 @@
                 align-items: center !important;
                 justify-content: space-between !important;
                 user-select: none !important;
+                flex: 0 0 auto !important;
             }
 
             #${PANEL_ID} .qol-cp-close {
@@ -167,6 +241,7 @@
                 gap: 9px !important;
                 padding: 10px !important;
                 background-color: #f7f5f0 !important;
+                overflow-y: auto !important;
             }
 
             #${PANEL_ID} .qol-cp-description {
@@ -255,6 +330,10 @@
                 border-color: #bda57e !important;
             }
 
+            #${PANEL_ID} .qol-cp-card.full-width {
+                grid-column: 1 / -1 !important;
+            }
+
             #${PANEL_ID} .qol-cp-card-label {
                 display: block !important;
                 margin-bottom: 4px !important;
@@ -271,6 +350,10 @@
                 font-size: 16px !important;
                 font-weight: bold !important;
                 font-variant-numeric: tabular-nums !important;
+            }
+
+            #${PANEL_ID} .qol-cp-card.full-width .qol-cp-card-value {
+                font-size: 14px !important;
             }
 
             #${PANEL_ID} .qol-cp-progress-box {
@@ -304,6 +387,104 @@
                 height: 100% !important;
                 width: 0;
                 background: linear-gradient(to bottom, #7ea743, #5f8733) !important;
+            }
+
+            #${PANEL_ID} .qol-cp-townhalls {
+                display: none;
+                border: 1px solid #c7b99e !important;
+                border-radius: 3px !important;
+                background-color: #ffffff !important;
+                overflow: hidden !important;
+            }
+
+            #${PANEL_ID} .qol-cp-townhall-heading {
+                display: flex !important;
+                align-items: center !important;
+                justify-content: space-between !important;
+                gap: 8px !important;
+                padding: 7px 9px !important;
+                border-bottom: 1px solid #c7b99e !important;
+                background-color: #e9dfcc !important;
+                color: #4f3b24 !important;
+                font-size: 10px !important;
+                font-weight: bold !important;
+                text-transform: uppercase !important;
+                letter-spacing: 0.3px !important;
+            }
+
+            #${PANEL_ID} .qol-cp-townhall-count {
+                min-width: 20px !important;
+                padding: 1px 5px !important;
+                border-radius: 10px !important;
+                background-color: #7d6342 !important;
+                color: #ffffff !important;
+                text-align: center !important;
+                font-size: 9px !important;
+            }
+
+            #${PANEL_ID} .qol-cp-townhall-table-wrap {
+                max-height: 190px !important;
+                overflow-y: auto !important;
+            }
+
+            #${PANEL_ID} .qol-cp-townhalls table {
+                width: 100% !important;
+                border-collapse: collapse !important;
+                table-layout: fixed !important;
+                font-size: 10px !important;
+            }
+
+            #${PANEL_ID} .qol-cp-townhalls th,
+            #${PANEL_ID} .qol-cp-townhalls td {
+                padding: 6px 8px !important;
+                border-bottom: 1px solid #e4dccd !important;
+                color: #4b3b28 !important;
+                text-align: left !important;
+                vertical-align: middle !important;
+                overflow: hidden !important;
+                text-overflow: ellipsis !important;
+                white-space: nowrap !important;
+            }
+
+            #${PANEL_ID} .qol-cp-townhalls th {
+                position: sticky !important;
+                top: 0 !important;
+                z-index: 1 !important;
+                background-color: #f4eee2 !important;
+                color: #6a573d !important;
+                font-size: 9px !important;
+                text-transform: uppercase !important;
+            }
+
+            #${PANEL_ID} .qol-cp-townhalls th:nth-child(1),
+            #${PANEL_ID} .qol-cp-townhalls td:nth-child(1) {
+                width: 46% !important;
+            }
+
+            #${PANEL_ID} .qol-cp-townhalls th:nth-child(2),
+            #${PANEL_ID} .qol-cp-townhalls td:nth-child(2) {
+                width: 32% !important;
+            }
+
+            #${PANEL_ID} .qol-cp-townhalls th:nth-child(3),
+            #${PANEL_ID} .qol-cp-townhalls td:nth-child(3) {
+                width: 22% !important;
+                text-align: center !important;
+            }
+
+            #${PANEL_ID} .qol-cp-townhall-empty {
+                padding: 10px !important;
+                color: #7a6a55 !important;
+                font-size: 10px !important;
+                text-align: center !important;
+            }
+
+            #${PANEL_ID} .qol-cp-townhall-meta {
+                padding: 5px 8px !important;
+                border-top: 1px solid #e4dccd !important;
+                background-color: #faf7f1 !important;
+                color: #7a6a55 !important;
+                font-size: 9px !important;
             }
 
             #${PANEL_ID} .qol-cp-meta {
@@ -360,7 +541,7 @@
 
         const buttonRect = toggleButton.getBoundingClientRect();
         const panelWidth = panel.offsetWidth || 450;
-        const panelHeight = panel.offsetHeight || 300;
+        const panelHeight = panel.offsetHeight || 360;
 
         const maximumLeft = Math.max(10, window.innerWidth - panelWidth - 10);
         const maximumTop = Math.max(10, window.innerHeight - panelHeight - 10);
@@ -398,6 +579,65 @@
         if (text) {
             button.textContent = text;
         }
+    }
+
+    function renderTownHalls(townHallScan) {
+        const panel = document.getElementById(PANEL_ID);
+        const section = panel?.querySelector('.qol-cp-townhalls');
+
+        if (!section) {
+            return;
+        }
+
+        const rows = townHallScan.results.map(item => `
+            <tr>
+                <td title="${escapeHtml(item.villageName)}">
+                    ${escapeHtml(item.villageName)}
+                </td>
+                <td>
+                    Town Hall ${Number.isFinite(item.level) ? item.level : '?'}
+                </td>
+                <td>
+                    ${Number.isFinite(item.location) ? item.location : '-'}
+                </td>
+            </tr>
+        `).join('');
+
+        section.innerHTML = `
+            <div class="qol-cp-townhall-heading">
+                <span>Town Halls Detected</span>
+                <span class="qol-cp-townhall-count">${townHallScan.results.length}</span>
+            </div>
+
+            ${townHallScan.results.length > 0 ? `
+                <div class="qol-cp-townhall-table-wrap">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Village Name</th>
+                                <th>Town Hall</th>
+                                <th>Location</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${rows}
+                        </tbody>
+                    </table>
+                </div>
+            ` : `
+                <div class="qol-cp-townhall-empty">
+                    No Town Halls were detected in the scanned villages.
+                </div>
+            `}
+
+            <div class="qol-cp-townhall-meta">
+                Scanned ${townHallScan.scannedCount}
+                ${townHallScan.scannedCount === 1 ? 'village' : 'villages'}.
+                ${townHallScan.complete ? '' : ' Scan may be incomplete.'}
+            </div>
+        `;
+
+        section.style.setProperty('display', 'block', 'important');
     }
 
     function renderResult(result) {
@@ -438,6 +678,11 @@
                 <span class="qol-cp-card-label">Total CP / Day</span>
                 <span class="qol-cp-card-value">${formatNumber(result.cpPerDay)}</span>
             </div>
+
+            <div class="qol-cp-card highlight full-width">
+                <span class="qol-cp-card-label">Prediction</span>
+                <span class="qol-cp-card-value">${escapeHtml(result.prediction.text)}</span>
+            </div>
         `;
 
         results.style.setProperty('display', 'grid', 'important');
@@ -450,13 +695,15 @@
         progressBar.style.setProperty('width', `${progress.toFixed(2)}%`, 'important');
         progressBox.style.setProperty('display', 'block', 'important');
 
+        renderTownHalls(result.townHalls);
+
         meta.innerHTML = `
             CP requirement read from <strong>${escapeHtml(result.villageName)}</strong>${
                 result.skippedCities > 0
                     ? ` after skipping ${result.skippedCities} ${result.skippedCities === 1 ? 'city' : 'cities'}.`
                     : '.'
             }
-            Celebrations are not included in CP/day calculations yet.
+            Celebrations are not included in CP/day calculations or the prediction yet.
         `;
 
         meta.style.setProperty('display', 'block', 'important');
@@ -471,11 +718,22 @@
 
         const results = panel.querySelector('.qol-cp-results');
         const progressBox = panel.querySelector('.qol-cp-progress-box');
+        const townHalls = panel.querySelector('.qol-cp-townhalls');
         const meta = panel.querySelector('.qol-cp-meta');
 
         results.innerHTML = '';
         results.style.setProperty('display', 'none', 'important');
+
         progressBox.style.setProperty('display', 'none', 'important');
+        progressBox.querySelector('.qol-cp-progress-bar')?.style.setProperty(
+            'width',
+            '0',
+            'important'
+        );
+
+        townHalls.innerHTML = '';
+        townHalls.style.setProperty('display', 'none', 'important');
+
         meta.innerHTML = '';
         meta.style.setProperty('display', 'none', 'important');
     }
@@ -498,7 +756,7 @@
 
             <div class="qol-cp-body">
                 <div class="qol-cp-description">
-                    Scan your current culture points, next CP target and total culture point production per day.
+                    Scan your CP progress, daily production, next target ETA and Town Halls across all villages.
                 </div>
 
                 <div class="qol-cp-controls">
@@ -520,6 +778,8 @@
                     </div>
                 </div>
 
+                <div class="qol-cp-townhalls"></div>
+
                 <div class="qol-cp-meta"></div>
             </div>
         `;
@@ -540,7 +800,7 @@
             }
 
             if (!isScanning) {
-                scanCulturePoints();
+                void scanCulturePoints();
             }
         };
 
@@ -707,7 +967,7 @@
                     <h3 class="qol-feature-name">CP Manager</h3>
 
                     <p class="qol-feature-desc">
-                        Reads your city-founding CP progress and total culture point production per day.
+                        Tracks CP progress, prediction and Town Halls across your villages.
                     </p>
                 </div>
 
@@ -749,8 +1009,9 @@
     }
 
     function findTownBox() {
-        return Array.from(document.querySelectorAll('.foundTown.contentBox'))
-            .find(box => /city founding/i.test(box.textContent || '')) || null;
+        const boxes = Array.from(document.querySelectorAll('.foundTown.contentBox'));
+
+        return boxes.find(box => box.querySelector('.townConditionTable')) || null;
     }
 
     function readTownState() {
@@ -766,7 +1027,9 @@
             return null;
         }
 
-        const cultureCell = table.querySelector('td[ng-if="!village.isTown"]');
+        const cultureCell = Array.from(
+            table.querySelectorAll('td[ng-if="!village.isTown"]')
+        ).find(cell => cell.querySelector('.currentValue'));
 
         if (cultureCell) {
             const current = parseInteger(
@@ -801,19 +1064,47 @@
             : null;
     }
 
+    function setVillageHash(parts) {
+        window.location.hash = `#/${parts.filter(Boolean).join('/')}`;
+    }
+
     function openCityFoundingWindow() {
-        const currentHash = window.location.hash || '';
-        const villageIdMatch = currentHash.match(/(?:^|\/)villId:([^/]+)/);
+        const villageId = getVillageIdFromHash();
         const route = ['page:village'];
 
-        if (villageIdMatch) {
-            route.push(`villId:${villageIdMatch[1]}`);
+        if (villageId) {
+            route.push(`villId:${villageId}`);
         }
 
-        route.push(`location:${BUILDING_LOCATION}`);
+        route.push(`location:${MAIN_BUILDING_LOCATION}`);
         route.push('window:building');
 
-        window.location.hash = `#/${route.join('/')}`;
+        setVillageHash(route);
+    }
+
+    function openCulturePointsOverview() {
+        const villageId = getVillageIdFromHash();
+        const route = ['page:village'];
+
+        if (villageId) {
+            route.push(`villId:${villageId}`);
+        }
+
+        route.push('window:villagesOverview');
+        route.push('tab:CulturePoints');
+
+        setVillageHash(route);
+    }
+
+    function openVillageBase() {
+        const villageId = getVillageIdFromHash();
+        const route = ['page:village'];
+
+        if (villageId) {
+            route.push(`villId:${villageId}`);
+        }
+
+        setVillageHash(route);
     }
 
     async function waitForTownState(timeoutMs = 7000) {
@@ -833,13 +1124,30 @@
     }
 
     function findVillageNavigationButton(direction) {
-        const selectors = [
+        const buttons = Array.from(document.querySelectorAll(
+            `#villageList .navigation.${direction}`
+        ));
+
+        const visible = buttons.find(button => {
+            const style = window.getComputedStyle(button);
+            const bounds = button.getBoundingClientRect();
+
+            return style.display !== 'none' &&
+                style.visibility !== 'hidden' &&
+                bounds.width > 0 &&
+                bounds.height > 0;
+        });
+
+        if (visible) {
+            return visible;
+        }
+
+        const fallbackSelectors = [
             `.currentVillageName.dropdown a.navigation.${direction}.clickable`,
-            `#villageList a.navigation.${direction}.clickable`,
             `a.navigation.${direction}[clickable="${direction}Village()"]`
         ];
 
-        for (const selector of selectors) {
+        for (const selector of fallbackSelectors) {
             const element = document.querySelector(selector);
 
             if (element) {
@@ -847,7 +1155,7 @@
             }
         }
 
-        return null;
+        return buttons[0] || null;
     }
 
     function clickVillageNavigation(direction) {
@@ -857,13 +1165,52 @@
             return false;
         }
 
-        button.dispatchEvent(new MouseEvent('click', {
+        const bounds = button.getBoundingClientRect();
+        const eventOptions = {
             view: window,
             bubbles: true,
             cancelable: true,
             composed: true,
-            button: 0
+            button: 0,
+            clientX: bounds.left + (bounds.width / 2),
+            clientY: bounds.top + (bounds.height / 2)
+        };
+
+        if (typeof PointerEvent === 'function') {
+            button.dispatchEvent(new PointerEvent('pointerover', {
+                ...eventOptions,
+                pointerId: 1,
+                pointerType: 'mouse',
+                isPrimary: true
+            }));
+
+            button.dispatchEvent(new PointerEvent('pointerdown', {
+                ...eventOptions,
+                buttons: 1,
+                pointerId: 1,
+                pointerType: 'mouse',
+                isPrimary: true
+            }));
+        }
+
+        button.dispatchEvent(new MouseEvent('mouseover', eventOptions));
+        button.dispatchEvent(new MouseEvent('mousedown', {
+            ...eventOptions,
+            buttons: 1
         }));
+
+        if (typeof PointerEvent === 'function') {
+            button.dispatchEvent(new PointerEvent('pointerup', {
+                ...eventOptions,
+                buttons: 0,
+                pointerId: 1,
+                pointerType: 'mouse',
+                isPrimary: true
+            }));
+        }
+
+        button.dispatchEvent(new MouseEvent('mouseup', eventOptions));
+        button.dispatchEvent(new MouseEvent('click', eventOptions));
 
         return true;
     }
@@ -893,7 +1240,7 @@
             return false;
         }
 
-        await sleep(200);
+        await sleep(250);
         return true;
     }
 
@@ -905,21 +1252,6 @@
         }
 
         return true;
-    }
-
-    function openCulturePointsOverview() {
-        const currentHash = window.location.hash || '';
-        const villageIdMatch = currentHash.match(/(?:^|\/)villId:([^/]+)/);
-        const route = ['page:village'];
-
-        if (villageIdMatch) {
-            route.push(`villId:${villageIdMatch[1]}`);
-        }
-
-        route.push('window:villagesOverview');
-        route.push('tab:CulturePoints');
-
-        window.location.hash = `#/${route.join('/')}`;
     }
 
     function getCulturePointsTable() {
@@ -994,6 +1326,237 @@
         return null;
     }
 
+    async function waitForVillageView(timeoutMs = 6000) {
+        const startedAt = performance.now();
+
+        while (performance.now() - startedAt < timeoutMs) {
+            const villageView = document.getElementById('villageView');
+
+            if (villageView && villageView.querySelector('building-location')) {
+                return villageView;
+            }
+
+            await sleep(100);
+        }
+
+        return null;
+    }
+
+    function readTownHallInCurrentVillage() {
+        const villageView = document.getElementById('villageView');
+
+        if (!villageView) {
+            return null;
+        }
+
+        const image = villageView.querySelector(
+            `img.location.buildingId${TOWN_HALL_BUILDING_ID}`
+        );
+
+        if (!image) {
+            return null;
+        }
+
+        const buildingLocation = image.closest('building-location');
+
+        if (!buildingLocation) {
+            return null;
+        }
+
+        const levelText = buildingLocation.querySelector('.buildingLevel')?.textContent;
+        const level = Number.parseInt(String(levelText || '').trim(), 10);
+
+        let location = null;
+
+        const imageIdMatch = String(image.id || '').match(/^buildingImage(\d+)$/);
+
+        if (imageIdMatch) {
+            location = Number.parseInt(imageIdMatch[1], 10);
+        }
+
+        if (!Number.isFinite(location)) {
+            const locationClass = Array.from(buildingLocation.classList)
+                .find(className => /^buildingLocation\d+$/.test(className));
+
+            if (locationClass) {
+                location = Number.parseInt(
+                    locationClass.replace('buildingLocation', ''),
+                    10
+                );
+            }
+        }
+
+        if (!Number.isFinite(location)) {
+            const status = buildingLocation.querySelector('.buildingStatusButton');
+            const statusLocationClass = status
+                ? Array.from(status.classList)
+                    .find(className => /^location_\d+$/.test(className))
+                : null;
+
+            if (statusLocationClass) {
+                location = Number.parseInt(
+                    statusLocationClass.replace('location_', ''),
+                    10
+                );
+            }
+        }
+
+        return {
+            villageName: getCurrentVillageName(),
+            level: Number.isFinite(level) ? level : null,
+            location: Number.isFinite(location) ? location : null
+        };
+    }
+
+    async function scanTownHalls() {
+        const startingIdentity = getVillageIdentity();
+        const visited = new Set();
+        const results = [];
+
+        let hops = 0;
+        let complete = false;
+
+        openVillageBase();
+        await sleep(300);
+
+        if (!await waitForVillageView()) {
+            throw new Error('The village view could not be loaded for Town Hall scanning.');
+        }
+
+        for (let attempt = 0; attempt < MAX_VILLAGE_HOPS; attempt += 1) {
+            const identity = getVillageIdentity();
+
+            if (visited.has(identity)) {
+                complete = identity === startingIdentity;
+                break;
+            }
+
+            visited.add(identity);
+
+            openVillageBase();
+            await sleep(250);
+
+            if (!await waitForVillageView()) {
+                break;
+            }
+
+            const villageName = getCurrentVillageName();
+
+            setStatus(
+                `Scanning Town Halls: ${villageName} (${visited.size})...`,
+                'working'
+            );
+
+            const townHall = readTownHallInCurrentVillage();
+
+            if (townHall) {
+                results.push(townHall);
+            }
+
+            if (!await moveVillage('next')) {
+                complete = visited.size === 1;
+                break;
+            }
+
+            hops += 1;
+
+            if (getVillageIdentity() === startingIdentity) {
+                complete = true;
+                break;
+            }
+        }
+
+        if (!complete && hops > 0) {
+            setStatus(
+                'Town Hall scan stopped early. Returning to the starting village...',
+                'working'
+            );
+
+            await restoreStartingVillage(hops);
+        }
+
+        return {
+            results,
+            scannedCount: visited.size,
+            complete
+        };
+    }
+
+    async function scanCpRequirement() {
+        let hops = 0;
+        const startingIdentity = getVillageIdentity();
+        const visited = new Set();
+
+        openCityFoundingWindow();
+        await sleep(250);
+
+        for (let attempt = 0; attempt < MAX_VILLAGE_HOPS; attempt += 1) {
+            const identity = getVillageIdentity();
+
+            if (visited.has(identity)) {
+                throw new Error(
+                    'Every available village appears to be a city. No village CP requirement could be read.'
+                );
+            }
+
+            visited.add(identity);
+
+            openCityFoundingWindow();
+            await sleep(200);
+
+            const state = await waitForTownState();
+
+            if (!state) {
+                throw new Error(
+                    'The City founding section could not be found in Main Building location 27.'
+                );
+            }
+
+            if (state.type === 'village') {
+                const requirement = {
+                    current: state.current,
+                    target: state.target,
+                    villageName: getCurrentVillageName(),
+                    skippedCities: hops
+                };
+
+                if (hops > 0) {
+                    setStatus(
+                        'CP requirement found. Returning to the starting village...',
+                        'working'
+                    );
+
+                    if (!await restoreStartingVillage(hops)) {
+                        throw new Error(
+                            'Could not return to the village where the scan started.'
+                        );
+                    }
+                }
+
+                return requirement;
+            }
+
+            setStatus(
+                `City detected in ${getCurrentVillageName()}. Checking the next village...`,
+                'working'
+            );
+
+            if (!await moveVillage('next')) {
+                throw new Error('The next-village control could not be used.');
+            }
+
+            hops += 1;
+
+            if (getVillageIdentity() === startingIdentity) {
+                throw new Error(
+                    'Every available village appears to be a city. No village CP requirement could be read.'
+                );
+            }
+        }
+
+        throw new Error('Could not determine current and target CP.');
+    }
+
     async function scanCulturePoints() {
         if (isScanning || !isEnabled()) {
             return;
@@ -1001,85 +1564,17 @@
 
         isScanning = true;
 
-        const originalHash = window.location.hash;
-        let hops = 0;
-        let requirementResult = null;
+        const originalHash = window.location.hash || '';
 
         resetResults();
         setScanButtonState(true, 'Scanning...');
-        setStatus('Opening Main Building and reading city-founding CP...', 'working');
+        setStatus(
+            'Opening Main Building and reading city-founding CP...',
+            'working'
+        );
 
         try {
-            openCityFoundingWindow();
-            await sleep(250);
-
-            const startingIdentity = getVillageIdentity();
-            const visited = new Set();
-
-            for (let attempt = 0; attempt < MAX_VILLAGE_HOPS; attempt += 1) {
-                const identity = getVillageIdentity();
-
-                if (visited.has(identity)) {
-                    throw new Error(
-                        'Every available village appears to be a city. No village CP requirement could be read.'
-                    );
-                }
-
-                visited.add(identity);
-                openCityFoundingWindow();
-                await sleep(200);
-
-                const state = await waitForTownState();
-
-                if (!state) {
-                    throw new Error(
-                        'The City founding section could not be found in Main Building location 27.'
-                    );
-                }
-
-                if (state.type === 'village') {
-                    requirementResult = {
-                        current: state.current,
-                        target: state.target,
-                        villageName: getCurrentVillageName(),
-                        skippedCities: hops
-                    };
-
-                    break;
-                }
-
-                setStatus(
-                    `City detected in ${getCurrentVillageName()}. Checking the next village...`,
-                    'working'
-                );
-
-                if (!await moveVillage('next')) {
-                    throw new Error('The next-village control could not be used.');
-                }
-
-                hops += 1;
-
-                if (getVillageIdentity() === startingIdentity) {
-                    throw new Error(
-                        'Every available village appears to be a city. No village CP requirement could be read.'
-                    );
-                }
-            }
-
-            if (!requirementResult) {
-                throw new Error('Could not determine current and target CP.');
-            }
-
-            if (hops > 0) {
-                setStatus(
-                    'CP requirement found. Returning to the starting village...',
-                    'working'
-                );
-
-                if (!await restoreStartingVillage(hops)) {
-                    throw new Error('Could not return to the village where the scan started.');
-                }
-            }
+            const requirement = await scanCpRequirement();
 
             setStatus(
                 'Opening Villages Overview and reading total CP/day...',
@@ -1097,31 +1592,41 @@
                 );
             }
 
-            const result = {
-                ...requirementResult,
+            const prediction = buildPrediction(
+                requirement.current,
+                requirement.target,
                 cpPerDay
+            );
+
+            setStatus(
+                'Scanning all villages for Town Halls...',
+                'working'
+            );
+
+            const townHalls = await scanTownHalls();
+
+            const result = {
+                ...requirement,
+                cpPerDay,
+                prediction,
+                townHalls
             };
 
             if (window.location.hash !== originalHash) {
                 window.location.hash = originalHash;
-                await sleep(100);
+                await sleep(150);
             }
 
             renderResult(result);
-            setStatus('CP scan complete.', 'success');
+
+            setStatus(
+                townHalls.complete
+                    ? `CP scan complete. ${townHalls.results.length} Town Hall${townHalls.results.length === 1 ? '' : 's'} detected.`
+                    : `CP scan complete. Town Hall scan may be incomplete (${townHalls.scannedCount} villages scanned).`,
+                townHalls.complete ? 'success' : 'error'
+            );
         } catch (error) {
             console.error('[APES CP Manager] Scan failed.', error);
-
-            if (hops > 0) {
-                try {
-                    await restoreStartingVillage(hops);
-                } catch (restoreError) {
-                    console.warn(
-                        '[APES CP Manager] Could not restore starting village after failure.',
-                        restoreError
-                    );
-                }
-            }
 
             if (window.location.hash !== originalHash) {
                 window.location.hash = originalHash;
@@ -1210,5 +1715,5 @@
 
     window.setInterval(ensureUI, 1200);
 
-    console.log('[APES CP Manager] Initialized.');
+    console.log('[APES CP Manager] Unified module initialized.');
 })();

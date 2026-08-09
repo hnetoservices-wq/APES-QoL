@@ -1,17 +1,20 @@
 /**
  * APES QoL Extension
- * Module: CP Scan Screen Lock
+ * Module: CP Runtime Helpers
  *
- * Mirrors the Watchlist update overlay while CP Manager performs its
- * automated navigation. The CP scanner itself remains the source of truth:
- * while its Scan CP button is disabled, the game screen is locked.
+ * - Mirrors the Watchlist update overlay while CP Manager performs its
+ *   automated navigation.
+ * - Keeps the planner's Extra CP / Day display discrete: celebration CP is
+ *   granted when a celebration starts, not continuously by the minute.
  */
-(function initCpScanLock() {
+(function initCpRuntimeHelpers() {
     'use strict';
 
     const PANEL_ID = 'qol-cp-manager-panel';
+    const PLANNER_ID = 'qol-cp-planner-panel';
     const OVERLAY_ID = 'qol-cp-scan-overlay';
     const POLL_MS = 100;
+    const DAY_SECONDS = 24 * 60 * 60;
 
     function getScanButton() {
         return document.querySelector(`#${PANEL_ID} .qol-cp-scan-btn`);
@@ -121,16 +124,136 @@
         }
     }
 
-    if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', syncOverlay, { once: true });
-    } else {
-        syncOverlay();
+    function parseDurationSeconds(value) {
+        const match = String(value || '').trim().match(/^(\d+):(\d{2}):(\d{2})$/);
+        if (!match) return null;
+
+        const hours = Number.parseInt(match[1], 10);
+        const minutes = Number.parseInt(match[2], 10);
+        const seconds = Number.parseInt(match[3], 10);
+
+        if (
+            !Number.isFinite(hours) ||
+            !Number.isFinite(minutes) ||
+            !Number.isFinite(seconds)
+        ) {
+            return null;
+        }
+
+        return (hours * 3600) + (minutes * 60) + seconds;
     }
 
-    window.setInterval(syncOverlay, POLL_MS);
+    function parseRewardFromCell(cell) {
+        const title = String(cell?.title || '');
+        const match = title.match(/([\d,.]+)\s+CP\s+(?:per celebration|from one planned celebration)/i);
+        if (!match) return null;
+
+        const value = Number.parseInt(match[1].replace(/[^0-9]/g, ''), 10);
+        return Number.isFinite(value) ? value : null;
+    }
+
+    function formatNumber(value) {
+        return Number(value).toLocaleString('en-US', {
+            maximumFractionDigits: 0
+        });
+    }
+
+    function getStartsPer24Hours(durationSeconds) {
+        if (!Number.isFinite(durationSeconds) || durationSeconds <= 0) return 0;
+
+        // CP is awarded at the START of a celebration. A 24/7 plan therefore
+        // counts every start that can occur inside the next 24-hour cycle,
+        // including the first start at t=0.
+        return Math.ceil(DAY_SECONDS / durationSeconds);
+    }
+
+    function syncPlannerDiscreteCp() {
+        const planner = document.getElementById(PLANNER_ID);
+        if (!planner || getComputedStyle(planner).display === 'none') return;
+
+        let total247CpPerDay = 0;
+
+        planner.querySelectorAll('.qol-cp-plan-row').forEach(row => {
+            const level = Number.parseInt(
+                row.querySelector('.qol-cp-level-select')?.value || '0',
+                10
+            );
+            const run247 = Boolean(row.querySelector('.qol-cp-247-check')?.checked);
+            const durationCell = row.querySelector('.qol-cp-plan-duration');
+            const contributionCell = row.querySelector('.qol-cp-plan-cpday');
+
+            if (!contributionCell || level <= 0) return;
+
+            const reward = parseRewardFromCell(contributionCell);
+            if (!Number.isFinite(reward) || reward <= 0) return;
+
+            if (!run247) {
+                const oneOffText = formatNumber(reward);
+                if (contributionCell.textContent !== oneOffText) {
+                    contributionCell.textContent = oneOffText;
+                }
+                contributionCell.title = `${oneOffText} CP from one planned celebration`;
+                return;
+            }
+
+            const durationSeconds = parseDurationSeconds(durationCell?.textContent);
+            const startsPerDay = getStartsPer24Hours(durationSeconds);
+            const extraCpPerDay = reward * startsPerDay;
+
+            total247CpPerDay += extraCpPerDay;
+
+            const extraText = formatNumber(extraCpPerDay);
+            const rewardText = formatNumber(reward);
+
+            if (contributionCell.textContent !== extraText) {
+                contributionCell.textContent = extraText;
+            }
+
+            contributionCell.title = (
+                `${rewardText} CP per celebration × ${startsPerDay} ` +
+                `${startsPerDay === 1 ? 'start' : 'starts'} in 24h = ` +
+                `${extraText} CP/day`
+            );
+        });
+
+        const totalElement = planner.querySelector('.qol-cp-plan-celebrations');
+        if (totalElement) {
+            const totalText = formatNumber(total247CpPerDay);
+            if (totalElement.textContent !== totalText) {
+                totalElement.textContent = totalText;
+            }
+        }
+
+        const note = planner.querySelector('.qol-cp-plan-note');
+        if (note) {
+            note.innerHTML = `
+                Every village with a selected Town Hall level plans <strong>one</strong>
+                selected celebration. Leave <strong>24/7</strong> unticked to count that
+                celebration once; tick it to repeat continuously. For 24/7 rows,
+                <strong>Extra CP / Day</strong> counts whole celebration starts inside a
+                24-hour cycle because CP is granted when each celebration starts; it is
+                not prorated by minute. Big Celebration becomes available at Town Hall
+                level 10. Town Hall construction/upgrade time and resource costs are not
+                included yet.
+            `;
+        }
+    }
+
+    function syncRuntimeHelpers() {
+        syncOverlay();
+        syncPlannerDiscreteCp();
+    }
+
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', syncRuntimeHelpers, { once: true });
+    } else {
+        syncRuntimeHelpers();
+    }
+
+    window.setInterval(syncRuntimeHelpers, POLL_MS);
 
     window.addEventListener('pagehide', removeOverlay);
     window.addEventListener('beforeunload', removeOverlay);
 
-    console.log('[APES CP Manager] Scan screen lock initialized.');
+    console.log('[APES CP Manager] Runtime helpers initialized.');
 })();

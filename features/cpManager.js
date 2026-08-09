@@ -140,7 +140,7 @@
             .replace(/&/g, '&amp;')
             .replace(/</g, '&lt;')
             .replace(/>/g, '&gt;')
-            .replace(/"/g, '&quot;')
+            .replace(/\"/g, '&quot;')
             .replace(/'/g, '&#039;');
     }
 
@@ -349,7 +349,6 @@
             #${PANEL_ID} th,#${PLANNER_ID} th{background:#f4eee2!important;color:#6a573d!important;font-size:9px!important;text-transform:uppercase!important;position:sticky!important;top:0!important;z-index:2!important}
             #${PANEL_ID} .qol-cp-box-meta{padding:5px 8px!important;border-top:1px solid #e4dccd!important;background:#faf7f1!important;color:#7a6a55!important;font-size:9px!important}
             #${PANEL_ID} .qol-cp-celebrations{display:none;padding:7px 9px!important;border:1px solid #d5c4a9!important;border-radius:3px!important;background:#fffaf0!important;color:#5b4630!important;font-size:10px!important;line-height:1.45!important}
-            #${PANEL_ID} .qol-cp-meta{display:none;color:#7a6a55!important;font-size:9px!important;line-height:1.4!important}
 
             #${PLANNER_ID} .qol-cp-planner-title-wrap{display:flex!important;align-items:center!important;gap:8px!important;min-width:0!important}
             #${PLANNER_ID} .qol-cp-speed{font-size:10px!important;font-weight:normal!important;opacity:.9!important;white-space:nowrap!important}
@@ -386,7 +385,6 @@
             #${PLANNER_ID} .qol-cp-roadmap-table th:nth-child(3),#${PLANNER_ID} .qol-cp-roadmap-table td:nth-child(3){width:27%!important;text-align:right!important}
             #${PLANNER_ID} .qol-cp-roadmap-table th:nth-child(4),#${PLANNER_ID} .qol-cp-roadmap-table td:nth-child(4){width:31%!important;text-align:right!important}
             #${PLANNER_ID} .qol-cp-roadmap-row.selected td{background:#fff6e5!important;color:#4f3b24!important;font-weight:bold!important}
-            #${PLANNER_ID} .qol-cp-plan-note{padding:7px 9px!important;color:#786750!important;font-size:9px!important;line-height:1.45!important;background:#fffaf0!important;border-top:1px solid #d6c8ae!important;flex:0 0 auto!important}
         `;
         document.head.appendChild(style);
     }
@@ -1091,10 +1089,6 @@
 
         renderTownHalls(result.townHalls);
         renderCelebrations(result.townHalls);
-
-        const meta = panel.querySelector('.qol-cp-meta');
-        meta.innerHTML = `CP requirement read from <strong>${escapeHtml(result.villageName)}</strong>${result.skippedCities ? ` after skipping ${result.skippedCities} ${result.skippedCities === 1 ? 'city' : 'cities'}` : ''}. The scanned target maps to expansion <strong>Slot ${nextSlot}</strong>. CP/day is continuous production; celebration CP is applied when each celebration starts.`;
-        meta.style.setProperty('display', 'block', 'important');
         setPlanButtonVisible(true);
     }
 
@@ -1480,7 +1474,6 @@
                     </table>
                 </div>
             </div>
-            <div class="qol-cp-plan-note">Choose any future <strong>Target Expansion</strong> to recalculate Planner ETA. The roadmap uses the same Town Hall, celebration, 24/7-period and Artwork settings. Every village with a selected Town Hall level plans <strong>one</strong> selected celebration. Leave <strong>24/7</strong> unticked to count that celebration once. Tick it to run the selected celebration continuously for the chosen period. For 24/7 rows, <strong>Extra CP / Period</strong> counts only celebration starts that occur before the period ends; existing scanned queues delay when the new plan can begin. <strong>Artworks</strong> use passive account CP/day up to 2,000 CP each; the planner applies the first immediately and any additional Artworks one day apart. Big Celebration becomes available at Town Hall level 10. Town Hall construction/upgrade time and resource costs are not included yet.</div>
         `;
 
         planner.querySelector('.qol-cp-speed').textContent = `Detected x${speedInfo.speed} · ${speedInfo.source}`;
@@ -1518,7 +1511,6 @@
         panel.querySelector('.qol-cp-progress-box').style.display = 'none';
         panel.querySelector('.qol-cp-townhalls').style.display = 'none';
         panel.querySelector('.qol-cp-celebrations').style.display = 'none';
-        panel.querySelector('.qol-cp-meta').style.display = 'none';
         document.getElementById(PLANNER_ID)?.style.setProperty('display', 'none', 'important');
     }
 
@@ -1632,7 +1624,6 @@
                 <div class="qol-cp-progress-box"><div class="qol-cp-progress-head"></div><div class="qol-cp-progress-track"><div class="qol-cp-progress-bar"></div></div></div>
                 <div class="qol-cp-townhalls qol-cp-box"></div>
                 <div class="qol-cp-celebrations"></div>
-                <div class="qol-cp-meta"></div>
             </div>
         `;
 

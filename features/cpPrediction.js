@@ -38,6 +38,37 @@
         );
     }
 
+    function getOrdinalSuffix(day) {
+        const remainder100 = day % 100;
+
+        if (remainder100 >= 11 && remainder100 <= 13) {
+            return 'th';
+        }
+
+        switch (day % 10) {
+            case 1:
+                return 'st';
+            case 2:
+                return 'nd';
+            case 3:
+                return 'rd';
+            default:
+                return 'th';
+        }
+    }
+
+    function formatTargetDate(date) {
+        const day = date.getDate();
+        const month = date.toLocaleString('en-GB', {
+            month: 'long'
+        });
+
+        const hours = String(date.getHours()).padStart(2, '0');
+        const minutes = String(date.getMinutes()).padStart(2, '0');
+
+        return `${day}${getOrdinalSuffix(day)} ${month}, at ${hours}h${minutes}m`;
+    }
+
     function buildPrediction(current, target, cpPerDay) {
         const remaining = Math.max(0, target - current);
 
@@ -49,18 +80,25 @@
             return 'Next CP estimate unavailable';
         }
 
-        const totalHours = Math.max(
+        const exactMinutes = Math.max(
             1,
-            Math.ceil((remaining / cpPerDay) * 24)
+            Math.ceil((remaining / cpPerDay) * 24 * 60)
         );
 
-        const days = Math.floor(totalHours / 24);
-        const hours = totalHours % 24;
+        const days = Math.floor(exactMinutes / (24 * 60));
+        const hours = Math.floor((exactMinutes % (24 * 60)) / 60);
 
-        const dayLabel = days === 1 ? 'Day' : 'Days';
-        const hourLabel = hours === 1 ? 'Hour' : 'Hours';
+        const targetDate = new Date(
+            Date.now() + exactMinutes * 60 * 1000
+        );
 
-        return `Next CP in ${days} ${dayLabel}/${hours} ${hourLabel}`;
+        const dayLabel = days === 1 ? 'day' : 'days';
+        const hourLabel = hours === 1 ? 'hour' : 'hours';
+
+        return (
+            `Next CP in ${days} ${dayLabel}, ${hours} ${hourLabel} ` +
+            `on ${formatTargetDate(targetDate)}`
+        );
     }
 
     function ensurePrediction() {

@@ -2,25 +2,18 @@
  * APES QoL Extension
  * Module: Culture Point Manager + CP Planner
  *
- * Scan:
- * - Current/target CP
- * - Total and per-village CP/day
- * - Town Halls, levels, locations and queued celebrations
- * - Celebration-aware ETA
- *
- * Planner:
- * - Appears after a successful scan
- * - Plans Town Hall level 0-20/current-20 per village
- * - Small / Big celebration strategy (Big requires level 10)
- * - x1/x3 celebration durations
- * - Repeatable celebration CP/day and planned target ETA
+ * Unified workflow:
+ * - Scan current/target CP and CP/day.
+ * - Scan every village for Town Halls and queued celebrations.
+ * - Predict the next CP target using queued celebration start times.
+ * - After a scan, open a side-by-side CP Planner for Town Hall / celebration planning.
  */
-
 (function initCpManagerModule() {
     'use strict';
 
     const FEATURE_KEY = 'cpManager';
     const PANEL_ID = 'qol-cp-manager-panel';
+    const PLANNER_ID = 'qol-cp-planner-panel';
     const TOGGLE_ID = 'qol-cp-toggle-btn';
     const STYLE_ID = 'qol-cp-manager-styles';
     const MENU_CHECKBOX_ID = 'qol-chk-cp-manager';
@@ -64,9 +57,7 @@
             : localStorage.getItem(`qol_${FEATURE_KEY}`) !== 'false';
     }
 
-    function sleep(ms) {
-        return new Promise(resolve => setTimeout(resolve, ms));
-    }
+    const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
 
     function parseInteger(value) {
         const digits = String(value || '').replace(/[^0-9]/g, '');
@@ -92,10 +83,7 @@
     }
 
     function normalizeName(value) {
-        return String(value || '')
-            .replace(/\s+/g, ' ')
-            .trim()
-            .toLowerCase();
+        return String(value || '').replace(/\s+/g, ' ').trim().toLowerCase();
     }
 
     function timeStringToSeconds(value) {
@@ -109,16 +97,12 @@
         const hours = Math.floor(total / 3600);
         const minutes = Math.floor((total % 3600) / 60);
         const secs = total % 60;
-        return [hours, minutes, secs]
-            .map(part => String(part).padStart(2, '0'))
-            .join(':');
+        return [hours, minutes, secs].map(part => String(part).padStart(2, '0')).join(':');
     }
 
     function getCelebrationDurationSeconds(level, type, speed = 1) {
-        const data = CELEBRATION_DURATIONS_X1[level];
-        const base = data ? timeStringToSeconds(data[type]) : null;
-        if (!Number.isFinite(base)) return null;
-        return Math.round(base / speed);
+        const base = timeStringToSeconds(CELEBRATION_DURATIONS_X1[level]?.[type]);
+        return Number.isFinite(base) ? Math.round(base / speed) : null;
     }
 
     function getOrdinalSuffix(day) {
@@ -181,9 +165,11 @@
             if (ratePerMs > 0 && before >= target) {
                 return formatPredictionResult(cursor + ((target - cp) / ratePerMs), applied);
             }
+
             cp = before + event.reward;
             cursor = event.startMs;
             applied.push(event);
+
             if (cp >= target) return formatPredictionResult(event.startMs, applied);
         }
 
@@ -194,15 +180,13 @@
         return formatPredictionResult(cursor + ((target - cp) / ratePerMs), applied);
     }
 
-    function detectServerSpeed(scanResult) {
+    function detectServerSpeed(result) {
         const hostname = String(window.location.hostname || '').toLowerCase();
-        if (/x3(?:\.|$)/i.test(hostname) || hostname.includes('x3.')) {
-            return { speed: 3, source: 'server name' };
-        }
+        if (/x3/.test(hostname)) return { speed: 3, source: 'server name' };
 
-        const villages = scanResult?.villages || [];
-        for (const village of villages) {
+        for (const village of result?.townHalls?.villages || []) {
             if (!village.hasTownHall || !Number.isFinite(village.level)) continue;
+
             for (const event of village.allCelebrations || []) {
                 const base = getCelebrationDurationSeconds(village.level, event.type, 1);
                 if (!base || !event.durationSeconds) continue;
@@ -217,17 +201,24 @@
 
     function injectStyles() {
         if (document.getElementById(STYLE_ID)) return;
+
         const style = document.createElement('style');
         style.id = STYLE_ID;
         style.textContent = `
-            #${TOGGLE_ID}{position:fixed!important;width:30px!important;height:30px!important;background:#ebdcb9!important;border:2px solid #7d6342!important;border-radius:50%!important;display:none;align-items:center!important;justify-content:center!important;cursor:pointer!important;z-index:9999!important;box-shadow:0 2px 5px rgba(0,0,0,.25)!important;box-sizing:border-box!important;padding:0!important;margin:0!important;user-select:none!important}
-            #${TOGGLE_ID}:hover{transform:scale(1.1)!important;background:#f7f5f0!important}
+            #${TOGGLE_ID}{position:fixed!important;width:30px!important;height:30px!important;background:#ebdcb9!important;border:2px solid #7d6342!important;border-radius:50%!important;display:none;align-items:center!important;justify-content:center!important;cursor:pointer!important;z-index:9999!important;box-shadow:0 2px 5px rgba(0,0,0,.28)!important;box-sizing:border-box!important;padding:0!important;margin:0!important;user-select:none!important}
+            #${TOGGLE_ID}:hover{transform:scale(1.08)!important;background:#f7f5f0!important}
             #${TOGGLE_ID} svg{width:18px!important;height:18px!important;fill:none!important;stroke:#7d6342!important;stroke-width:2!important;stroke-linecap:round!important;stroke-linejoin:round!important;pointer-events:none!important}
             body.qol-menu-open #${TOGGLE_ID}{filter:blur(3px)!important;opacity:.35!important;pointer-events:none!important}
-            #${PANEL_ID},#${PANEL_ID} *{box-sizing:border-box!important;font-family:Arial,Helvetica,sans-serif!important;text-shadow:none!important}
-            #${PANEL_ID}{position:fixed!important;display:none;flex-direction:column!important;width:620px!important;max-width:95vw!important;max-height:90vh!important;border:3px solid #634d31!important;border-radius:4px!important;background:#f7f5f0!important;color:#333!important;box-shadow:0 10px 30px rgba(0,0,0,.5)!important;overflow:hidden!important;z-index:999999!important}
-            #${PANEL_ID} .qol-cp-header{height:34px!important;padding:6px 10px!important;background:linear-gradient(to bottom,#6d5436,#543f26)!important;color:#f7f5f0!important;font-size:14px!important;font-weight:bold!important;display:flex!important;align-items:center!important;justify-content:space-between!important;flex:0 0 auto!important}
-            #${PANEL_ID} .qol-cp-close{cursor:pointer!important;color:#fff!important;font-size:21px!important;font-weight:bold!important;line-height:1!important;padding:0 5px!important;border-radius:3px!important;background:rgba(0,0,0,.2)!important}
+
+            #${PANEL_ID},#${PANEL_ID} *,#${PLANNER_ID},#${PLANNER_ID} *{box-sizing:border-box!important;font-family:Arial,Helvetica,sans-serif!important;text-shadow:none!important}
+            #${PANEL_ID},#${PLANNER_ID}{position:fixed!important;display:none;flex-direction:column!important;border:3px solid #634d31!important;border-radius:4px!important;background:#f7f5f0!important;color:#333!important;box-shadow:0 10px 30px rgba(0,0,0,.5)!important;overflow:hidden!important;z-index:999999!important}
+            #${PANEL_ID}{width:560px!important;max-width:94vw!important;max-height:86vh!important}
+            #${PLANNER_ID}{width:680px!important;max-width:94vw!important;max-height:86vh!important;z-index:1000000!important}
+
+            #${PANEL_ID} .qol-cp-header,#${PLANNER_ID} .qol-cp-planner-head{height:34px!important;padding:6px 10px!important;background:linear-gradient(to bottom,#6d5436,#543f26)!important;color:#f7f5f0!important;font-size:14px!important;font-weight:bold!important;display:flex!important;align-items:center!important;justify-content:space-between!important;flex:0 0 auto!important;cursor:move!important;user-select:none!important}
+            #${PANEL_ID} .qol-cp-close,#${PLANNER_ID} .qol-cp-planner-close{cursor:pointer!important;color:#fff!important;font-size:21px!important;font-weight:bold!important;line-height:1!important;padding:0 5px!important;border-radius:3px!important;background:rgba(0,0,0,.2)!important}
+            #${PANEL_ID} .qol-cp-close:hover,#${PLANNER_ID} .qol-cp-planner-close:hover{background:rgba(255,255,255,.16)!important}
+
             #${PANEL_ID} .qol-cp-body{display:flex!important;flex-direction:column!important;gap:9px!important;padding:10px!important;background:#f7f5f0!important;overflow-y:auto!important}
             #${PANEL_ID} .qol-cp-description{padding:7px 9px!important;background:#fff6e5!important;border:1px solid #d4c2a5!important;border-radius:4px!important;color:#5b4630!important;font-size:11px!important;line-height:1.4!important}
             #${PANEL_ID} .qol-cp-controls{display:flex!important;align-items:center!important;gap:7px!important;flex-wrap:wrap!important}
@@ -235,10 +226,11 @@
             #${PANEL_ID} .qol-cp-action-btn.secondary{background:linear-gradient(to bottom,#937951,#6b5335)!important}
             #${PANEL_ID} .qol-cp-action-btn.hidden{display:none!important}
             #${PANEL_ID} .qol-cp-action-btn.disabled{opacity:.45!important;pointer-events:none!important}
-            #${PANEL_ID} .qol-cp-status{flex:1 1 180px!important;min-height:18px!important;color:#6c5a43!important;font-size:10px!important;line-height:1.35!important}
+            #${PANEL_ID} .qol-cp-status{flex:1 1 160px!important;min-height:18px!important;color:#6c5a43!important;font-size:10px!important;line-height:1.35!important}
             #${PANEL_ID} .qol-cp-status[data-tone=working]{color:#8a5a16!important;font-weight:bold!important}
             #${PANEL_ID} .qol-cp-status[data-tone=success]{color:#4f7328!important;font-weight:bold!important}
             #${PANEL_ID} .qol-cp-status[data-tone=error]{color:#a52a2a!important;font-weight:bold!important}
+
             #${PANEL_ID} .qol-cp-results{display:none;grid-template-columns:repeat(2,minmax(0,1fr))!important;gap:7px!important}
             #${PANEL_ID} .qol-cp-card{min-width:0!important;padding:8px 10px!important;background:#fff!important;border:1px solid #c7b99e!important;border-radius:3px!important}
             #${PANEL_ID} .qol-cp-card.highlight{background:#fff6e5!important;border-color:#bda57e!important}
@@ -250,30 +242,38 @@
             #${PANEL_ID} .qol-cp-progress-head{display:flex!important;justify-content:space-between!important;margin-bottom:6px!important;color:#5b4630!important;font-size:10px!important;font-weight:bold!important}
             #${PANEL_ID} .qol-cp-progress-track{height:9px!important;border:1px solid #b9a589!important;border-radius:8px!important;background:#eee8dc!important;overflow:hidden!important}
             #${PANEL_ID} .qol-cp-progress-bar{height:100%!important;width:0;background:linear-gradient(to bottom,#7ea743,#5f8733)!important}
+
             #${PANEL_ID} .qol-cp-box{display:none;border:1px solid #c7b99e!important;border-radius:3px!important;background:#fff!important;overflow:hidden!important}
-            #${PANEL_ID} .qol-cp-box-heading{display:flex!important;align-items:center!important;justify-content:space-between!important;gap:8px!important;padding:7px 9px!important;border-bottom:1px solid #c7b99e!important;background:#e9dfcc!important;color:#4f3b24!important;font-size:10px!important;font-weight:bold!important;text-transform:uppercase!important;letter-spacing:.3px!important}
+            #${PANEL_ID} .qol-cp-box-heading{display:flex!important;align-items:center!important;justify-content:space-between!important;padding:7px 9px!important;border-bottom:1px solid #c7b99e!important;background:#e9dfcc!important;color:#4f3b24!important;font-size:10px!important;font-weight:bold!important;text-transform:uppercase!important}
             #${PANEL_ID} .qol-cp-count{min-width:20px!important;padding:1px 5px!important;border-radius:10px!important;background:#7d6342!important;color:#fff!important;text-align:center!important;font-size:9px!important}
-            #${PANEL_ID} .qol-cp-table-wrap{max-height:220px!important;overflow:auto!important}
-            #${PANEL_ID} table{width:100%!important;border-collapse:collapse!important;table-layout:fixed!important;font-size:10px!important}
-            #${PANEL_ID} th,#${PANEL_ID} td{padding:6px 7px!important;border-bottom:1px solid #e4dccd!important;color:#4b3b28!important;text-align:left!important;vertical-align:middle!important;overflow:hidden!important;text-overflow:ellipsis!important;white-space:nowrap!important}
-            #${PANEL_ID} th{position:sticky!important;top:0!important;z-index:1!important;background:#f4eee2!important;color:#6a573d!important;font-size:9px!important;text-transform:uppercase!important}
-            #${PANEL_ID} .qol-cp-box-meta{padding:5px 8px!important;border-top:1px solid #e4dccd!important;background:#faf7f1!important;color:#7a6a55!important;font-size:9px!important;line-height:1.45!important}
+            #${PANEL_ID} .qol-cp-table-wrap{max-height:150px!important;overflow:auto!important}
+            #${PANEL_ID} table,#${PLANNER_ID} table{width:100%!important;border-collapse:collapse!important;table-layout:fixed!important;font-size:10px!important}
+            #${PANEL_ID} th,#${PANEL_ID} td,#${PLANNER_ID} th,#${PLANNER_ID} td{padding:6px 8px!important;border-bottom:1px solid #e4dccd!important;color:#4b3b28!important;text-align:left!important;vertical-align:middle!important;white-space:nowrap!important;overflow:hidden!important;text-overflow:ellipsis!important}
+            #${PANEL_ID} th,#${PLANNER_ID} th{background:#f4eee2!important;color:#6a573d!important;font-size:9px!important;text-transform:uppercase!important;position:sticky!important;top:0!important;z-index:2!important}
+            #${PANEL_ID} .qol-cp-box-meta{padding:5px 8px!important;border-top:1px solid #e4dccd!important;background:#faf7f1!important;color:#7a6a55!important;font-size:9px!important}
             #${PANEL_ID} .qol-cp-celebrations{display:none;padding:7px 9px!important;border:1px solid #d5c4a9!important;border-radius:3px!important;background:#fffaf0!important;color:#5b4630!important;font-size:10px!important;line-height:1.45!important}
-            #${PANEL_ID} .qol-cp-meta{display:none;padding-top:2px!important;color:#7a6a55!important;font-size:9px!important;line-height:1.4!important}
-            #${PANEL_ID} .qol-cp-planner{display:none;border:2px solid #8a7049!important;border-radius:4px!important;background:#fbf7ef!important;overflow:hidden!important}
-            #${PANEL_ID} .qol-cp-planner-head{padding:8px 10px!important;background:linear-gradient(to bottom,#806640,#684e2f)!important;color:#fff!important;font-size:12px!important;font-weight:bold!important;display:flex!important;justify-content:space-between!important;align-items:center!important}
-            #${PANEL_ID} .qol-cp-speed{font-size:10px!important;font-weight:normal!important;opacity:.9!important}
-            #${PANEL_ID} .qol-cp-planner-summary{display:grid!important;grid-template-columns:repeat(2,minmax(0,1fr))!important;gap:6px!important;padding:8px!important;border-bottom:1px solid #d6c8ae!important}
-            #${PANEL_ID} .qol-cp-plan-stat{padding:6px 8px!important;background:#fff!important;border:1px solid #d3c4aa!important;border-radius:3px!important}
-            #${PANEL_ID} .qol-cp-plan-stat span{display:block!important;color:#77654d!important;font-size:8px!important;font-weight:bold!important;text-transform:uppercase!important}
-            #${PANEL_ID} .qol-cp-plan-stat strong{display:block!important;margin-top:2px!important;color:#3f3020!important;font-size:13px!important}
-            #${PANEL_ID} .qol-cp-planner-table th:nth-child(1),#${PANEL_ID} .qol-cp-planner-table td:nth-child(1){width:30%!important}
-            #${PANEL_ID} .qol-cp-planner-table th:nth-child(2),#${PANEL_ID} .qol-cp-planner-table td:nth-child(2){width:16%!important;text-align:center!important}
-            #${PANEL_ID} .qol-cp-planner-table th:nth-child(3),#${PANEL_ID} .qol-cp-planner-table td:nth-child(3){width:18%!important;text-align:center!important}
-            #${PANEL_ID} .qol-cp-planner-table th:nth-child(4),#${PANEL_ID} .qol-cp-planner-table td:nth-child(4){width:18%!important;text-align:center!important}
-            #${PANEL_ID} .qol-cp-planner-table th:nth-child(5),#${PANEL_ID} .qol-cp-planner-table td:nth-child(5){width:18%!important;text-align:right!important}
-            #${PANEL_ID} .qol-cp-plan-select{width:100%!important;max-width:105px!important;height:24px!important;padding:2px 4px!important;border:1px solid #a99473!important;border-radius:3px!important;background:#fff!important;color:#493821!important;font-size:10px!important}
-            #${PANEL_ID} .qol-cp-plan-note{padding:7px 9px!important;color:#786750!important;font-size:9px!important;line-height:1.45!important;background:#fffaf0!important;border-top:1px solid #d6c8ae!important}
+            #${PANEL_ID} .qol-cp-meta{display:none;color:#7a6a55!important;font-size:9px!important;line-height:1.4!important}
+
+            #${PLANNER_ID} .qol-cp-planner-title-wrap{display:flex!important;align-items:center!important;gap:8px!important;min-width:0!important}
+            #${PLANNER_ID} .qol-cp-speed{font-size:10px!important;font-weight:normal!important;opacity:.9!important;white-space:nowrap!important}
+            #${PLANNER_ID} .qol-cp-planner-body{display:flex!important;flex-direction:column!important;min-height:0!important;background:#fbf7ef!important;overflow:hidden!important}
+            #${PLANNER_ID} .qol-cp-planner-summary{display:grid!important;grid-template-columns:repeat(4,minmax(0,1fr))!important;gap:6px!important;padding:8px!important;border-bottom:1px solid #d6c8ae!important;flex:0 0 auto!important}
+            #${PLANNER_ID} .qol-cp-plan-stat{padding:6px 8px!important;background:#fff!important;border:1px solid #d3c4aa!important;border-radius:3px!important;min-width:0!important}
+            #${PLANNER_ID} .qol-cp-plan-stat span{display:block!important;color:#77654d!important;font-size:8px!important;font-weight:bold!important;text-transform:uppercase!important}
+            #${PLANNER_ID} .qol-cp-plan-stat strong{display:block!important;margin-top:2px!important;color:#3f3020!important;font-size:13px!important;overflow:hidden!important;text-overflow:ellipsis!important}
+            #${PLANNER_ID} .qol-cp-planner-table-wrap{overflow:auto!important;max-height:52vh!important;background:#fff!important}
+            #${PLANNER_ID} .qol-cp-planner-table th:nth-child(1),#${PLANNER_ID} .qol-cp-planner-table td:nth-child(1){width:24%!important}
+            #${PLANNER_ID} .qol-cp-planner-table th:nth-child(2),#${PLANNER_ID} .qol-cp-planner-table td:nth-child(2){width:14%!important;text-align:center!important}
+            #${PLANNER_ID} .qol-cp-planner-table th:nth-child(3),#${PLANNER_ID} .qol-cp-planner-table td:nth-child(3){width:17%!important;text-align:center!important}
+            #${PLANNER_ID} .qol-cp-planner-table th:nth-child(4),#${PLANNER_ID} .qol-cp-planner-table td:nth-child(4){width:10%!important;text-align:center!important}
+            #${PLANNER_ID} .qol-cp-planner-table th:nth-child(5),#${PLANNER_ID} .qol-cp-planner-table td:nth-child(5){width:17%!important;text-align:center!important}
+            #${PLANNER_ID} .qol-cp-planner-table th:nth-child(6),#${PLANNER_ID} .qol-cp-planner-table td:nth-child(6){width:18%!important;text-align:right!important}
+            #${PLANNER_ID} .qol-cp-plan-select{display:inline-block!important;appearance:auto!important;-webkit-appearance:auto!important;width:100%!important;min-width:64px!important;max-width:112px!important;height:28px!important;line-height:normal!important;padding:3px 6px!important;border:1px solid #a99473!important;border-radius:3px!important;background-color:#fff!important;color:#493821!important;-webkit-text-fill-color:#493821!important;font-size:11px!important;font-weight:normal!important;opacity:1!important;visibility:visible!important}
+            #${PLANNER_ID} .qol-cp-plan-select option{background:#fff!important;color:#493821!important;font-size:11px!important}
+            #${PLANNER_ID} .qol-cp-plan-select:disabled{background:#eee8dc!important;color:#8b7d69!important;-webkit-text-fill-color:#8b7d69!important;opacity:.75!important}
+            #${PLANNER_ID} .qol-cp-247-check{appearance:auto!important;-webkit-appearance:checkbox!important;width:16px!important;height:16px!important;margin:0!important;vertical-align:middle!important;cursor:pointer!important;opacity:1!important;visibility:visible!important}
+            #${PLANNER_ID} .qol-cp-247-check:disabled{opacity:.4!important;cursor:default!important}
+            #${PLANNER_ID} .qol-cp-plan-note{padding:7px 9px!important;color:#786750!important;font-size:9px!important;line-height:1.45!important;background:#fffaf0!important;border-top:1px solid #d6c8ae!important;flex:0 0 auto!important}
         `;
         document.head.appendChild(style);
     }
@@ -286,10 +286,12 @@
             '.villageEntry.active',
             '.active .villageEntry'
         ];
+
         for (const selector of selectors) {
             const text = document.querySelector(selector)?.textContent?.replace(/[\r\n]+/g, ' ').trim();
             if (text) return text;
         }
+
         return 'Current village';
     }
 
@@ -302,37 +304,106 @@
         return id ? `id:${id}` : `name:${getCurrentVillageName()}`;
     }
 
-    function getVillageListNames() {
-        const items = Array.from(document.querySelectorAll('#villageList .villageEntry'));
-        const names = [];
-        const seen = new Set();
-        items.forEach(item => {
-            const name = item.textContent?.replace(/\s+/g, ' ').trim();
-            const key = normalizeName(name);
-            if (name && !seen.has(key)) {
-                seen.add(key);
-                names.push(name);
-            }
-        });
-        return names;
+    function clampPanelToViewport(panel) {
+        const rect = panel.getBoundingClientRect();
+        const maxLeft = Math.max(8, window.innerWidth - rect.width - 8);
+        const maxTop = Math.max(8, window.innerHeight - rect.height - 8);
+        const left = Math.max(8, Math.min(rect.left, maxLeft));
+        const top = Math.max(8, Math.min(rect.top, maxTop));
+        panel.style.setProperty('left', `${left}px`, 'important');
+        panel.style.setProperty('top', `${top}px`, 'important');
+        panel.style.setProperty('right', 'auto', 'important');
+        panel.style.setProperty('bottom', 'auto', 'important');
     }
 
-    function positionPanelUnderButton(panel) {
+    function positionPanelUnderButton(panel, force = false) {
+        if (!force && panel.dataset.userPositioned === 'true') return;
         const button = document.getElementById(TOGGLE_ID);
         if (!button) return;
+
         const rect = button.getBoundingClientRect();
-        const width = panel.offsetWidth || 620;
+        const width = panel.offsetWidth || 560;
         const height = panel.offsetHeight || 500;
-        panel.style.setProperty('left', `${Math.max(10, Math.min(rect.left, window.innerWidth - width - 10))}px`, 'important');
-        panel.style.setProperty('top', `${Math.max(10, Math.min(rect.bottom + 20, window.innerHeight - height - 10))}px`, 'important');
+        const left = Math.max(8, Math.min(rect.left, window.innerWidth - width - 8));
+        const top = Math.max(8, Math.min(rect.bottom + 18, window.innerHeight - height - 8));
+
+        panel.style.setProperty('left', `${left}px`, 'important');
+        panel.style.setProperty('top', `${top}px`, 'important');
+        panel.style.setProperty('right', 'auto', 'important');
+        panel.style.setProperty('bottom', 'auto', 'important');
+    }
+
+    function positionPlannerBesideMain(force = false) {
+        const main = document.getElementById(PANEL_ID);
+        const planner = document.getElementById(PLANNER_ID);
+        if (!main || !planner || getComputedStyle(planner).display === 'none') return;
+        if (!force && planner.dataset.userPositioned === 'true') return;
+
+        const mainRect = main.getBoundingClientRect();
+        const plannerWidth = planner.offsetWidth || 680;
+        const plannerHeight = planner.offsetHeight || 440;
+        const preferredLeft = mainRect.right + 10;
+        let left = preferredLeft;
+
+        if (preferredLeft + plannerWidth > window.innerWidth - 8) {
+            left = Math.max(8, window.innerWidth - plannerWidth - 8);
+        }
+
+        const top = Math.max(8, Math.min(mainRect.top, window.innerHeight - plannerHeight - 8));
+        planner.style.setProperty('left', `${left}px`, 'important');
+        planner.style.setProperty('top', `${top}px`, 'important');
+        planner.style.setProperty('right', 'auto', 'important');
+        planner.style.setProperty('bottom', 'auto', 'important');
+    }
+
+    function makeDraggable(panel, handle, onMove) {
+        if (!panel || !handle || handle.dataset.qolDragBound === 'true') return;
+        handle.dataset.qolDragBound = 'true';
+
+        let dragging = false;
+        let offsetX = 0;
+        let offsetY = 0;
+
+        handle.addEventListener('pointerdown', event => {
+            if (event.button !== 0 || event.target.closest('.qol-cp-close,.qol-cp-planner-close')) return;
+            const rect = panel.getBoundingClientRect();
+            dragging = true;
+            offsetX = event.clientX - rect.left;
+            offsetY = event.clientY - rect.top;
+            panel.dataset.userPositioned = 'true';
+            handle.setPointerCapture?.(event.pointerId);
+            event.preventDefault();
+        });
+
+        handle.addEventListener('pointermove', event => {
+            if (!dragging) return;
+            const width = panel.offsetWidth;
+            const height = panel.offsetHeight;
+            const left = Math.max(8, Math.min(event.clientX - offsetX, window.innerWidth - width - 8));
+            const top = Math.max(8, Math.min(event.clientY - offsetY, window.innerHeight - height - 8));
+            panel.style.setProperty('left', `${left}px`, 'important');
+            panel.style.setProperty('top', `${top}px`, 'important');
+            panel.style.setProperty('right', 'auto', 'important');
+            panel.style.setProperty('bottom', 'auto', 'important');
+            onMove?.();
+            event.preventDefault();
+        });
+
+        const finish = event => {
+            if (!dragging) return;
+            dragging = false;
+            try { handle.releasePointerCapture?.(event.pointerId); } catch (_) {}
+        };
+
+        handle.addEventListener('pointerup', finish);
+        handle.addEventListener('pointercancel', finish);
     }
 
     function setStatus(message, tone = 'neutral') {
-        const el = document.querySelector(`#${PANEL_ID} .qol-cp-status`);
-        if (el) {
-            el.textContent = message;
-            el.dataset.tone = tone;
-        }
+        const element = document.querySelector(`#${PANEL_ID} .qol-cp-status`);
+        if (!element) return;
+        element.textContent = message;
+        element.dataset.tone = tone;
     }
 
     function setScanButtonState(disabled, text) {
@@ -344,8 +415,7 @@
     }
 
     function setPlanButtonVisible(visible) {
-        const button = document.querySelector(`#${PANEL_ID} .qol-cp-plan-btn`);
-        if (button) button.classList.toggle('hidden', !visible);
+        document.querySelector(`#${PANEL_ID} .qol-cp-plan-btn`)?.classList.toggle('hidden', !visible);
     }
 
     function findTownBox() {
@@ -354,8 +424,7 @@
     }
 
     function readTownState() {
-        const box = findTownBox();
-        const table = box?.querySelector('.townConditionTable');
+        const table = findTownBox()?.querySelector('.townConditionTable');
         if (!table) return null;
 
         const cultureCell = Array.from(table.querySelectorAll('td[ng-if="!village.isTown"]'))
@@ -364,8 +433,8 @@
         if (cultureCell) {
             const current = parseInteger(cultureCell.querySelector('.currentValue')?.textContent);
             const candidates = Array.from(cultureCell.querySelectorAll('span'))
-                .filter(el => !el.classList.contains('currentValue'))
-                .map(el => parseInteger(el.textContent))
+                .filter(element => !element.classList.contains('currentValue'))
+                .map(element => parseInteger(element.textContent))
                 .filter(Number.isFinite);
             const target = candidates.at(-1);
             if (Number.isFinite(current) && Number.isFinite(target)) {
@@ -373,6 +442,7 @@
             }
         }
 
+        const box = findTownBox();
         const city = table.classList.contains('town') ||
             Boolean(table.querySelector('td[ng-if="village.isTown"]')) ||
             Boolean(box?.querySelector('.buildingDescription span[ng-if="village.isTown"]'));
@@ -385,8 +455,8 @@
 
     function villageRoute() {
         const route = ['page:village'];
-        const id = getVillageIdFromHash();
-        if (id) route.push(`villId:${id}`);
+        const villageId = getVillageIdFromHash();
+        if (villageId) route.push(`villId:${villageId}`);
         return route;
     }
 
@@ -428,20 +498,30 @@
     function clickVillageNavigation(direction) {
         const button = findVillageNavigationButton(direction);
         if (!button) return false;
+
         const rect = button.getBoundingClientRect();
         const options = {
-            view: window, bubbles: true, cancelable: true, composed: true, button: 0,
-            clientX: rect.left + rect.width / 2, clientY: rect.top + rect.height / 2
+            view: window,
+            bubbles: true,
+            cancelable: true,
+            composed: true,
+            button: 0,
+            clientX: rect.left + rect.width / 2,
+            clientY: rect.top + rect.height / 2
         };
+
         if (typeof PointerEvent === 'function') {
             button.dispatchEvent(new PointerEvent('pointerover', { ...options, pointerId: 1, pointerType: 'mouse', isPrimary: true }));
             button.dispatchEvent(new PointerEvent('pointerdown', { ...options, buttons: 1, pointerId: 1, pointerType: 'mouse', isPrimary: true }));
         }
+
         button.dispatchEvent(new MouseEvent('mouseover', options));
         button.dispatchEvent(new MouseEvent('mousedown', { ...options, buttons: 1 }));
+
         if (typeof PointerEvent === 'function') {
             button.dispatchEvent(new PointerEvent('pointerup', { ...options, buttons: 0, pointerId: 1, pointerType: 'mouse', isPrimary: true }));
         }
+
         button.dispatchEvent(new MouseEvent('mouseup', options));
         button.dispatchEvent(new MouseEvent('click', options));
         return true;
@@ -465,7 +545,7 @@
     }
 
     async function restoreStartingVillage(hops) {
-        for (let i = 0; i < hops; i += 1) {
+        for (let index = 0; index < hops; index += 1) {
             if (!await moveVillage('previous')) return false;
         }
         return true;
@@ -491,6 +571,7 @@
             const cells = row.querySelectorAll('td');
             const cpPerDay = parseInteger(cells[cpIndex]?.textContent);
             if (!Number.isFinite(cpPerDay)) return;
+
             const nameCell = cells[0];
             const name = nameCell?.querySelector('.villageName,.villageEntry,a')?.textContent?.trim() ||
                 nameCell?.textContent?.replace(/\s+/g, ' ').trim();
@@ -502,6 +583,7 @@
         if (!Number.isFinite(total) && villageCp.length) {
             total = villageCp.reduce((sum, item) => sum + item.cpPerDay, 0);
         }
+
         return Number.isFinite(total) ? { total, villageCp } : null;
     }
 
@@ -528,17 +610,21 @@
     function readTownHallInCurrentVillage() {
         const view = document.getElementById('villageView');
         if (!view) return null;
+
         const image = view.querySelector(`img.location.buildingId${TOWN_HALL_BUILDING_ID}`);
         if (!image) return null;
+
         const wrapper = image.closest('building-location');
         if (!wrapper) return null;
 
         const level = Number.parseInt(wrapper.querySelector('.buildingLevel')?.textContent?.trim() || '', 10);
         let location = Number.parseInt(String(image.id || '').match(/^buildingImage(\d+)$/)?.[1] || '', 10);
+
         if (!Number.isFinite(location)) {
-            const cls = Array.from(wrapper.classList).find(name => /^buildingLocation\d+$/.test(name));
-            if (cls) location = Number.parseInt(cls.replace('buildingLocation', ''), 10);
+            const locationClass = Array.from(wrapper.classList).find(name => /^buildingLocation\d+$/.test(name));
+            if (locationClass) location = Number.parseInt(locationClass.replace('buildingLocation', ''), 10);
         }
+
         return {
             villageName: getCurrentVillageName(),
             villageId: getVillageIdFromHash(),
@@ -547,14 +633,15 @@
             location: Number.isFinite(location) ? location : null,
             celebrations: [],
             allCelebrations: [],
-            busyUntilMs: null
+            busyUntilMs: null,
+            cpPerDay: null
         };
     }
 
     async function waitForTownHallContent(timeout = 5500) {
         const started = performance.now();
         while (performance.now() - started < timeout) {
-            if (document.querySelector('.celebrationBox') || document.querySelectorAll('.orderItem.item.celebration').length) return true;
+            if (document.querySelector('.celebrationBox') || document.querySelectorAll('.orderItem.item.celebration').length > 0) return true;
             await sleep(100);
         }
         return false;
@@ -563,53 +650,65 @@
     function getCelebrationType(card) {
         const image = card.querySelector('img.itemImage.celebration');
         const displayedReward = parseInteger(card.querySelector('.headerTrapezoidal .content')?.textContent);
-        if (image?.classList.contains('celebration_small_illu') || /small/i.test(card.querySelector('.itemHead')?.textContent || '')) {
+        const title = card.querySelector('.itemHead')?.textContent || '';
+
+        if (image?.classList.contains('celebration_small_illu') || /small/i.test(title)) {
             return { type: 'small', reward: displayedReward || SMALL_CELEBRATION_CAP };
         }
-        if (image?.classList.contains('celebration_large_illu') || /(large|big)/i.test(card.querySelector('.itemHead')?.textContent || '')) {
+
+        if (image?.classList.contains('celebration_large_illu') || /(large|big)/i.test(title)) {
             return { type: 'big', reward: displayedReward || BIG_CELEBRATION_CAP };
         }
+
         return null;
     }
 
     function readCelebrationsForCurrentTownHall(townHall, cpReadAtMs) {
-        const future = [];
+        const cards = Array.from(document.querySelectorAll('.orderItem.item.celebration'));
         const all = [];
+        const future = [];
         const seen = new Set();
         let busyUntilMs = null;
 
-        Array.from(document.querySelectorAll('.orderItem.item.celebration')).forEach(card => {
+        cards.forEach(card => {
             const celebration = getCelebrationType(card);
-            const bar = card.querySelector('.progressContainer .progressbar[finish-time][duration]');
-            if (!celebration || !bar) return;
+            const progressbar = card.querySelector('.progressContainer .progressbar[finish-time][duration]');
+            if (!celebration || !progressbar) return;
 
-            const finishSeconds = Number.parseInt(bar.getAttribute('finish-time') || '', 10);
-            const durationSeconds = Number.parseInt(bar.getAttribute('duration') || '', 10);
+            const finishSeconds = Number.parseInt(progressbar.getAttribute('finish-time') || '', 10);
+            const durationSeconds = Number.parseInt(progressbar.getAttribute('duration') || '', 10);
             const queueCount = Math.max(1, Number.parseInt(card.querySelector('.queueAmount')?.textContent || '1', 10) || 1);
             if (!Number.isFinite(finishSeconds) || !Number.isFinite(durationSeconds) || durationSeconds <= 0) return;
 
-            const firstStart = finishSeconds - durationSeconds;
-            for (let i = 0; i < queueCount; i += 1) {
-                const startSeconds = firstStart + (i * durationSeconds);
+            const firstStartSeconds = finishSeconds - durationSeconds;
+
+            for (let index = 0; index < queueCount; index += 1) {
+                const startSeconds = firstStartSeconds + (index * durationSeconds);
+                const finishMs = (startSeconds + durationSeconds) * 1000;
+                const startMs = startSeconds * 1000;
+                const key = `${townHall.villageId || townHall.villageName}:${celebration.type}:${startSeconds}`;
+                if (seen.has(key)) continue;
+                seen.add(key);
+
                 const event = {
                     villageName: townHall.villageName,
                     villageId: townHall.villageId,
                     type: celebration.type,
                     reward: celebration.reward,
-                    startMs: startSeconds * 1000,
-                    finishMs: (startSeconds + durationSeconds) * 1000,
+                    startMs,
+                    finishMs,
                     durationSeconds
                 };
-                const key = `${townHall.villageId || townHall.villageName}:${event.type}:${event.startMs}`;
-                if (seen.has(key)) continue;
-                seen.add(key);
+
                 all.push(event);
-                busyUntilMs = Math.max(busyUntilMs || 0, event.finishMs);
-                if (event.startMs > cpReadAtMs) future.push(event);
+                if (startMs > cpReadAtMs) future.push(event);
+                if (!busyUntilMs || finishMs > busyUntilMs) busyUntilMs = finishMs;
             }
         });
 
-        return { future, all, busyUntilMs };
+        all.sort((a, b) => a.startMs - b.startMs);
+        future.sort((a, b) => a.startMs - b.startMs);
+        return { all, future, busyUntilMs };
     }
 
     async function scanTownHallCelebrations(townHall, cpReadAtMs) {
@@ -617,6 +716,7 @@
         openTownHallWindow(townHall.location);
         await sleep(250);
         if (!await waitForTownHallContent()) return;
+
         const data = readCelebrationsForCurrentTownHall(townHall, cpReadAtMs);
         townHall.celebrations = data.future;
         townHall.allCelebrations = data.all;
@@ -641,6 +741,7 @@
                 complete = identity === startingIdentity;
                 break;
             }
+
             visited.add(identity);
             openVillageBase();
             await sleep(220);
@@ -659,7 +760,8 @@
                     location: null,
                     celebrations: [],
                     allCelebrations: [],
-                    busyUntilMs: null
+                    busyUntilMs: null,
+                    cpPerDay: null
                 };
             } else {
                 try {
@@ -669,14 +771,16 @@
                     console.warn(`[APES CP Manager] Celebration scan failed for ${villageName}.`, error);
                 }
             }
-            villages.push(village);
 
+            villages.push(village);
             openVillageBase();
             await sleep(120);
+
             if (!await moveVillage('next')) {
                 complete = visited.size === 1;
                 break;
             }
+
             hops += 1;
             if (getVillageIdentity() === startingIdentity) {
                 complete = true;
@@ -686,23 +790,23 @@
 
         if (!complete && hops > 0) await restoreStartingVillage(hops);
 
-        const unique = [];
-        const seen = new Set();
+        const uniqueEvents = [];
+        const seenEvents = new Set();
         celebrationEvents.sort((a, b) => a.startMs - b.startMs).forEach(event => {
             const key = `${event.villageId || event.villageName}:${event.type}:${event.startMs}`;
-            if (!seen.has(key)) {
-                seen.add(key);
-                unique.push(event);
-            }
+            if (seenEvents.has(key)) return;
+            seenEvents.add(key);
+            uniqueEvents.push(event);
         });
 
-        return { villages, celebrationEvents: unique, scannedCount: visited.size, complete };
+        return { villages, celebrationEvents: uniqueEvents, scannedCount: visited.size, complete };
     }
 
     async function scanCpRequirement() {
         let hops = 0;
         const startingIdentity = getVillageIdentity();
         const visited = new Set();
+
         openCityFoundingWindow();
         await sleep(250);
 
@@ -710,6 +814,7 @@
             const identity = getVillageIdentity();
             if (visited.has(identity)) throw new Error('Every available village appears to be a city.');
             visited.add(identity);
+
             openCityFoundingWindow();
             await sleep(200);
             const state = await waitForTownState();
@@ -723,7 +828,11 @@
                     skippedCities: hops,
                     readAtMs: Date.now()
                 };
-                if (hops > 0 && !await restoreStartingVillage(hops)) throw new Error('Could not return to the starting village.');
+
+                if (hops > 0 && !await restoreStartingVillage(hops)) {
+                    throw new Error('Could not return to the starting village.');
+                }
+
                 return result;
             }
 
@@ -732,21 +841,25 @@
             hops += 1;
             if (getVillageIdentity() === startingIdentity) throw new Error('Every available village appears to be a city.');
         }
+
         throw new Error('Could not determine current and target CP.');
     }
 
     function attachVillageCp(villages, culture) {
         const cpMap = new Map(culture.villageCp.map(item => [normalizeName(item.name), item.cpPerDay]));
+
         villages.forEach(village => {
             const key = normalizeName(village.villageName);
             let cp = cpMap.get(key);
+
             if (!Number.isFinite(cp)) {
                 const found = culture.villageCp.find(item => {
-                    const a = normalizeName(item.name);
-                    return a.includes(key) || key.includes(a);
+                    const itemName = normalizeName(item.name);
+                    return itemName.includes(key) || key.includes(itemName);
                 });
                 cp = found?.cpPerDay;
             }
+
             village.cpPerDay = Number.isFinite(cp) ? cp : null;
         });
     }
@@ -754,48 +867,64 @@
     function renderTownHalls(scan) {
         const section = document.querySelector(`#${PANEL_ID} .qol-cp-townhalls`);
         if (!section) return;
-        const halls = scan.villages.filter(v => v.hasTownHall);
-        const rows = halls.map(v => `
-            <tr><td title="${escapeHtml(v.villageName)}">${escapeHtml(v.villageName)}</td><td>Town Hall ${v.level}</td><td style="text-align:center">${v.location ?? '-'}</td></tr>
+
+        const halls = scan.villages.filter(village => village.hasTownHall);
+        const rows = halls.map(village => `
+            <tr>
+                <td title="${escapeHtml(village.villageName)}">${escapeHtml(village.villageName)}</td>
+                <td>Town Hall ${village.level}</td>
+                <td style="text-align:center">${village.location ?? '-'}</td>
+            </tr>
         `).join('');
+
         section.innerHTML = `
             <div class="qol-cp-box-heading"><span>Town Halls Detected</span><span class="qol-cp-count">${halls.length}</span></div>
             <div class="qol-cp-table-wrap"><table><thead><tr><th>Village Name</th><th>Town Hall</th><th>Location</th></tr></thead><tbody>${rows || '<tr><td colspan="3">No Town Halls detected.</td></tr>'}</tbody></table></div>
-            <div class="qol-cp-box-meta">Scanned ${scan.scannedCount} ${scan.scannedCount === 1 ? 'village' : 'villages'}.${scan.complete ? '' : ' Scan may be incomplete.'}</div>`;
+            <div class="qol-cp-box-meta">Scanned ${scan.scannedCount} ${scan.scannedCount === 1 ? 'village' : 'villages'}.${scan.complete ? '' : ' Scan may be incomplete.'}</div>
+        `;
         section.style.setProperty('display', 'block', 'important');
     }
 
     function renderCelebrations(scan) {
         const section = document.querySelector(`#${PANEL_ID} .qol-cp-celebrations`);
         if (!section) return;
+
         if (!scan.celebrationEvents.length) {
             section.innerHTML = '<strong>Upcoming celebrations:</strong> None detected. Celebrations already started are included in Current CP.';
         } else {
             const total = scan.celebrationEvents.reduce((sum, event) => sum + event.reward, 0);
-            const lines = scan.celebrationEvents.map(event => `${escapeHtml(event.villageName)}: ${event.type === 'small' ? 'Small' : 'Big'} +${formatNumber(event.reward)} CP on ${formatTargetDate(new Date(event.startMs))}`).join('<br>');
+            const lines = scan.celebrationEvents.map(event =>
+                `${escapeHtml(event.villageName)}: ${event.type === 'small' ? 'Small' : 'Big'} +${formatNumber(event.reward)} CP on ${formatTargetDate(new Date(event.startMs))}`
+            ).join('<br>');
             section.innerHTML = `<strong>Upcoming celebrations:</strong> ${scan.celebrationEvents.length} queued, +${formatNumber(total)} CP scheduled.<br>${lines}`;
         }
+
         section.style.setProperty('display', 'block', 'important');
     }
 
     function renderResult(result) {
         const panel = document.getElementById(PANEL_ID);
         if (!panel) return;
+
         const remaining = Math.max(0, result.target - result.current);
-        const progress = result.target > 0 ? Math.max(0, Math.min(100, result.current / result.target * 100)) : 0;
+        const progress = result.target > 0
+            ? Math.max(0, Math.min(100, (result.current / result.target) * 100))
+            : 0;
+
         const results = panel.querySelector('.qol-cp-results');
         results.innerHTML = `
             <div class="qol-cp-card"><span class="qol-cp-card-label">Current CP</span><span class="qol-cp-card-value">${formatNumber(result.current)}</span></div>
             <div class="qol-cp-card"><span class="qol-cp-card-label">Target CP</span><span class="qol-cp-card-value">${formatNumber(result.target)}</span></div>
             <div class="qol-cp-card"><span class="qol-cp-card-label">Remaining CP</span><span class="qol-cp-card-value">${formatNumber(remaining)}</span></div>
             <div class="qol-cp-card highlight"><span class="qol-cp-card-label">Total CP / Day</span><span class="qol-cp-card-value">${formatNumber(result.cpPerDay)}</span></div>
-            <div class="qol-cp-card highlight full-width"><span class="qol-cp-card-label">Prediction</span><span class="qol-cp-card-value">${escapeHtml(result.prediction.text)}</span></div>`;
+            <div class="qol-cp-card highlight full-width"><span class="qol-cp-card-label">Prediction</span><span class="qol-cp-card-value">${escapeHtml(result.prediction.text)}</span></div>
+        `;
         results.style.setProperty('display', 'grid', 'important');
 
-        const box = panel.querySelector('.qol-cp-progress-box');
-        box.querySelector('.qol-cp-progress-head').innerHTML = `<span>${formatNumber(result.current)} / ${formatNumber(result.target)}</span><span>${progress.toFixed(1)}%</span>`;
-        box.querySelector('.qol-cp-progress-bar').style.setProperty('width', `${progress.toFixed(2)}%`, 'important');
-        box.style.setProperty('display', 'block', 'important');
+        const progressBox = panel.querySelector('.qol-cp-progress-box');
+        progressBox.querySelector('.qol-cp-progress-head').innerHTML = `<span>${formatNumber(result.current)} / ${formatNumber(result.target)}</span><span>${progress.toFixed(1)}%</span>`;
+        progressBox.querySelector('.qol-cp-progress-bar').style.setProperty('width', `${progress.toFixed(2)}%`, 'important');
+        progressBox.style.setProperty('display', 'block', 'important');
 
         renderTownHalls(result.townHalls);
         renderCelebrations(result.townHalls);
@@ -816,7 +945,35 @@
         return Math.min(BIG_CELEBRATION_CAP, result.cpPerDay || 0);
     }
 
-    function buildPlannerPrediction(result, plans, speed) {
+    function readPlannerPlans() {
+        const planner = document.getElementById(PLANNER_ID);
+        if (!planner || !lastScanResult) return [];
+
+        const speed = detectServerSpeed(lastScanResult).speed;
+        return Array.from(planner.querySelectorAll('.qol-cp-plan-row')).map(row => {
+            const index = Number.parseInt(row.dataset.index, 10);
+            const village = lastScanResult.townHalls.villages[index];
+            const level = Number.parseInt(row.querySelector('.qol-cp-level-select')?.value || '0', 10);
+            const type = row.querySelector('.qol-cp-type-select')?.value || 'small';
+            const run247 = Boolean(row.querySelector('.qol-cp-247-check')?.checked);
+            const durationSeconds = getCelebrationDurationSeconds(level, type, speed);
+            const reward = level > 0
+                ? (type === 'big' ? getBigReward(lastScanResult) : getSmallReward(village))
+                : 0;
+
+            return {
+                villageName: village.villageName,
+                level,
+                type,
+                run247,
+                durationSeconds,
+                reward,
+                busyUntilMs: village.busyUntilMs
+            };
+        });
+    }
+
+    function buildPlannerPrediction(result, plans) {
         const now = Date.now();
         const rate = result.cpPerDay > 0 ? result.cpPerDay / DAY_MS : 0;
         let estimatedCurrent = result.current + (Math.max(0, now - result.readAtMs) * rate);
@@ -824,14 +981,16 @@
         result.townHalls.celebrationEvents.forEach(event => {
             if (event.startMs > result.readAtMs && event.startMs <= now) estimatedCurrent += event.reward;
         });
+
         if (estimatedCurrent >= result.target) return formatPredictionResult(now, []);
 
         const fixedEvents = result.townHalls.celebrationEvents
             .filter(event => event.startMs > now)
-            .map(event => ({ ...event, source: 'queued' }));
+            .map(event => ({ ...event, source: 'queued' }))
+            .sort((a, b) => a.startMs - b.startMs);
 
         const sequences = plans
-            .filter(plan => plan.level > 0 && plan.durationSeconds > 0 && plan.reward > 0)
+            .filter(plan => plan.run247 && plan.level > 0 && plan.durationSeconds > 0 && plan.reward > 0)
             .map(plan => ({
                 ...plan,
                 nextStartMs: Math.max(now, plan.busyUntilMs || now),
@@ -840,15 +999,22 @@
 
         let cp = estimatedCurrent;
         let cursor = now;
-        const fixed = [...fixedEvents].sort((a, b) => a.startMs - b.startMs);
+        const fixed = [...fixedEvents];
         const applied = [];
 
         for (let guard = 0; guard < 10000; guard += 1) {
             let next = fixed[0] || null;
             let sequence = null;
+
             for (const candidate of sequences) {
                 if (!next || candidate.nextStartMs < next.startMs) {
-                    next = { startMs: candidate.nextStartMs, reward: candidate.reward, villageName: candidate.villageName, type: candidate.type, source: 'plan' };
+                    next = {
+                        startMs: candidate.nextStartMs,
+                        reward: candidate.reward,
+                        villageName: candidate.villageName,
+                        type: candidate.type,
+                        source: 'plan'
+                    };
                     sequence = candidate;
                 }
             }
@@ -878,112 +1044,144 @@
         return { text: 'Planner ETA exceeded calculation range', targetDate: null, exactMinutes: null };
     }
 
-    function readPlannerPlans() {
-        const panel = document.getElementById(PANEL_ID);
-        if (!panel || !lastScanResult) return [];
-        const speed = detectServerSpeed(lastScanResult).speed;
-        return Array.from(panel.querySelectorAll('.qol-cp-plan-row')).map(row => {
-            const villageIndex = Number.parseInt(row.dataset.index, 10);
-            const village = lastScanResult.townHalls.villages[villageIndex];
-            const level = Number.parseInt(row.querySelector('.qol-cp-level-select')?.value || '0', 10);
-            const type = row.querySelector('.qol-cp-type-select')?.value || 'small';
-            const durationSeconds = getCelebrationDurationSeconds(level, type, speed);
-            const reward = level > 0
-                ? (type === 'big' ? getBigReward(lastScanResult) : getSmallReward(village))
-                : 0;
-            return { villageName: village.villageName, level, type, durationSeconds, reward, busyUntilMs: village.busyUntilMs };
-        });
-    }
-
     function updatePlanner() {
         if (!lastScanResult) return;
-        const panel = document.getElementById(PANEL_ID);
+        const planner = document.getElementById(PLANNER_ID);
+        if (!planner) return;
+
         const speedInfo = detectServerSpeed(lastScanResult);
         let totalCelebrationCpDay = 0;
 
-        panel.querySelectorAll('.qol-cp-plan-row').forEach(row => {
+        planner.querySelectorAll('.qol-cp-plan-row').forEach(row => {
             const index = Number.parseInt(row.dataset.index, 10);
             const village = lastScanResult.townHalls.villages[index];
             const levelSelect = row.querySelector('.qol-cp-level-select');
             const typeSelect = row.querySelector('.qol-cp-type-select');
-            const level = Number.parseInt(levelSelect.value, 10);
+            const run247Input = row.querySelector('.qol-cp-247-check');
+            const level = Number.parseInt(levelSelect.value || '0', 10);
 
             typeSelect.disabled = level === 0;
+            run247Input.disabled = level === 0;
+            if (level === 0) run247Input.checked = false;
+
             const bigOption = typeSelect.querySelector('option[value="big"]');
             if (bigOption) bigOption.disabled = level < 10;
             if (level < 10 && typeSelect.value === 'big') typeSelect.value = 'small';
 
-            const type = typeSelect.value;
+            const type = typeSelect.value || 'small';
             const duration = getCelebrationDurationSeconds(level, type, speedInfo.speed);
-            const reward = level > 0 ? (type === 'big' ? getBigReward(lastScanResult) : getSmallReward(village)) : 0;
-            const cpDay = duration > 0 ? reward * 86400 / duration : 0;
-            totalCelebrationCpDay += cpDay;
+            const reward = level > 0
+                ? (type === 'big' ? getBigReward(lastScanResult) : getSmallReward(village))
+                : 0;
+            const cpDay = run247Input.checked && duration > 0
+                ? reward * 86400 / duration
+                : 0;
 
+            totalCelebrationCpDay += cpDay;
             row.querySelector('.qol-cp-plan-duration').textContent = duration ? secondsToTimeString(duration) : '-';
             row.querySelector('.qol-cp-plan-cpday').textContent = cpDay > 0 ? formatNumber(cpDay) : '-';
-            row.querySelector('.qol-cp-plan-cpday').title = reward > 0 ? `${formatNumber(reward)} CP per celebration` : '';
+            row.querySelector('.qol-cp-plan-cpday').title = reward > 0
+                ? `${formatNumber(reward)} CP per celebration${run247Input.checked ? ', repeated 24/7' : ''}`
+                : '';
         });
 
         const plans = readPlannerPlans();
-        const prediction = buildPlannerPrediction(lastScanResult, plans, speedInfo.speed);
-        panel.querySelector('.qol-cp-plan-base').textContent = formatNumber(lastScanResult.cpPerDay);
-        panel.querySelector('.qol-cp-plan-celebrations').textContent = formatNumber(totalCelebrationCpDay);
-        panel.querySelector('.qol-cp-plan-combined').textContent = formatNumber(lastScanResult.cpPerDay + totalCelebrationCpDay);
-        panel.querySelector('.qol-cp-plan-eta').textContent = prediction.text;
-        panel.querySelector('.qol-cp-speed').textContent = `Detected x${speedInfo.speed} · ${speedInfo.source}`;
+        const prediction = buildPlannerPrediction(lastScanResult, plans);
+
+        planner.querySelector('.qol-cp-plan-base').textContent = formatNumber(lastScanResult.cpPerDay);
+        planner.querySelector('.qol-cp-plan-celebrations').textContent = formatNumber(totalCelebrationCpDay);
+        planner.querySelector('.qol-cp-plan-combined').textContent = formatNumber(lastScanResult.cpPerDay + totalCelebrationCpDay);
+        planner.querySelector('.qol-cp-plan-eta').textContent = prediction.text;
+        planner.querySelector('.qol-cp-speed').textContent = `Detected x${speedInfo.speed} · ${speedInfo.source}`;
+    }
+
+    function buildLevelOptions(village) {
+        const start = village.hasTownHall ? Math.max(1, village.level) : 0;
+        const options = [];
+        for (let level = start; level <= 20; level += 1) {
+            options.push(`<option value="${level}"${level === start ? ' selected' : ''}>${level}</option>`);
+        }
+        return options.join('');
+    }
+
+    function getDefaultCelebrationType(village) {
+        const future = village.celebrations || [];
+        if (future.length) return future[future.length - 1].type;
+        const all = village.allCelebrations || [];
+        if (all.length) return all[all.length - 1].type;
+        return 'small';
     }
 
     function renderPlanner() {
         if (!lastScanResult) return;
-        const panel = document.getElementById(PANEL_ID);
-        const planner = panel.querySelector('.qol-cp-planner');
-        const speed = detectServerSpeed(lastScanResult);
+        const planner = mountPlannerPanel();
+        const speedInfo = detectServerSpeed(lastScanResult);
 
         const rows = lastScanResult.townHalls.villages.map((village, index) => {
-            const minLevel = village.hasTownHall ? Math.max(1, village.level) : 0;
-            const options = [];
-            for (let level = minLevel; level <= 20; level += 1) {
-                options.push(`<option value="${level}"${level === minLevel ? ' selected' : ''}>${level}</option>`);
-            }
+            const startLevel = village.hasTownHall ? Math.max(1, village.level) : 0;
+            const defaultType = getDefaultCelebrationType(village);
+            const bigDisabled = startLevel < 10;
+            const effectiveDefaultType = bigDisabled && defaultType === 'big' ? 'small' : defaultType;
+
             return `
                 <tr class="qol-cp-plan-row" data-index="${index}">
                     <td title="${escapeHtml(village.villageName)}">${escapeHtml(village.villageName)}</td>
-                    <td><select class="qol-cp-plan-select qol-cp-level-select">${options.join('')}</select></td>
-                    <td><select class="qol-cp-plan-select qol-cp-type-select"${minLevel === 0 ? ' disabled' : ''}><option value="small">Small</option><option value="big"${minLevel < 10 ? ' disabled' : ''}>Big</option></select></td>
+                    <td><select class="qol-cp-plan-select qol-cp-level-select">${buildLevelOptions(village)}</select></td>
+                    <td>
+                        <select class="qol-cp-plan-select qol-cp-type-select"${startLevel === 0 ? ' disabled' : ''}>
+                            <option value="small"${effectiveDefaultType === 'small' ? ' selected' : ''}>Small</option>
+                            <option value="big"${effectiveDefaultType === 'big' ? ' selected' : ''}${bigDisabled ? ' disabled' : ''}>Big</option>
+                        </select>
+                    </td>
+                    <td><input type="checkbox" class="qol-cp-247-check" aria-label="Run celebrations 24/7"${startLevel === 0 ? ' disabled' : ''}></td>
                     <td class="qol-cp-plan-duration">-</td>
                     <td class="qol-cp-plan-cpday">-</td>
-                </tr>`;
+                </tr>
+            `;
         }).join('');
 
-        planner.innerHTML = `
-            <div class="qol-cp-planner-head"><span>CP Planner</span><span class="qol-cp-speed">Detected x${speed.speed}</span></div>
+        planner.querySelector('.qol-cp-planner-body').innerHTML = `
             <div class="qol-cp-planner-summary">
                 <div class="qol-cp-plan-stat"><span>Base CP / Day</span><strong class="qol-cp-plan-base">-</strong></div>
-                <div class="qol-cp-plan-stat"><span>Celebration CP / Day</span><strong class="qol-cp-plan-celebrations">-</strong></div>
+                <div class="qol-cp-plan-stat"><span>24/7 Celebration CP / Day</span><strong class="qol-cp-plan-celebrations">-</strong></div>
                 <div class="qol-cp-plan-stat"><span>Combined Avg. CP / Day</span><strong class="qol-cp-plan-combined">-</strong></div>
                 <div class="qol-cp-plan-stat"><span>Planner ETA</span><strong class="qol-cp-plan-eta" style="font-size:10px!important">-</strong></div>
             </div>
-            <div class="qol-cp-table-wrap"><table class="qol-cp-planner-table"><thead><tr><th>Village</th><th>Town Hall</th><th>Celebration</th><th>Duration</th><th>CP / Day</th></tr></thead><tbody>${rows}</tbody></table></div>
-            <div class="qol-cp-plan-note">Town Hall upgrades/build times and celebration resource costs are not included yet. The planner assumes the selected celebration is run continuously once the village's currently detected celebration queue is clear. Small Celebration reward uses that village's scanned CP/day up to 500; Big uses account CP/day up to 2,000.</div>`;
-        planner.style.setProperty('display', 'block', 'important');
-        planner.querySelectorAll('select').forEach(select => select.addEventListener('change', updatePlanner));
-        updatePlanner();
-        requestAnimationFrame(() => positionPanelUnderButton(panel));
+            <div class="qol-cp-planner-table-wrap">
+                <table class="qol-cp-planner-table">
+                    <thead><tr><th>Village</th><th>Town Hall</th><th>Celebration</th><th>24/7</th><th>Duration</th><th>Extra CP / Day</th></tr></thead>
+                    <tbody>${rows}</tbody>
+                </table>
+            </div>
+            <div class="qol-cp-plan-note">Tick <strong>24/7</strong> to include continuous celebrations from that village in the planner. Big Celebration becomes available at Town Hall level 10. Existing Town Hall rows start at their scanned level; villages without one start at 0. Town Hall construction/upgrade time and resource costs are not included yet.</div>
+        `;
+
+        planner.querySelector('.qol-cp-speed').textContent = `Detected x${speedInfo.speed} · ${speedInfo.source}`;
+        planner.querySelectorAll('select,input').forEach(control => control.addEventListener('change', updatePlanner));
+        planner.style.setProperty('display', 'flex', 'important');
+        planner.dataset.userPositioned = 'false';
+        requestAnimationFrame(() => {
+            positionPlannerBesideMain(true);
+            updatePlanner();
+        });
     }
 
     function togglePlanner() {
         if (!lastScanResult) return;
-        const planner = document.querySelector(`#${PANEL_ID} .qol-cp-planner`);
+        const planner = mountPlannerPanel();
+
         if (getComputedStyle(planner).display !== 'none') {
             planner.style.setProperty('display', 'none', 'important');
-        } else {
-            renderPlanner();
+            return;
         }
+
+        renderPlanner();
     }
 
     function resetResults() {
         const panel = document.getElementById(PANEL_ID);
         if (!panel) return;
+
         lastScanResult = null;
         setPlanButtonVisible(false);
         panel.querySelector('.qol-cp-results').innerHTML = '';
@@ -992,19 +1190,21 @@
         panel.querySelector('.qol-cp-townhalls').style.display = 'none';
         panel.querySelector('.qol-cp-celebrations').style.display = 'none';
         panel.querySelector('.qol-cp-meta').style.display = 'none';
-        panel.querySelector('.qol-cp-planner').style.display = 'none';
+        document.getElementById(PLANNER_ID)?.style.setProperty('display', 'none', 'important');
     }
 
     async function scanCulturePoints() {
         if (isScanning || !isEnabled()) return;
         isScanning = true;
         const originalHash = window.location.hash || '';
+
         resetResults();
         setScanButtonState(true, 'Scanning...');
         setStatus('Opening Main Building and reading city-founding CP...', 'working');
 
         try {
             const requirement = await scanCpRequirement();
+
             setStatus('Opening Villages Overview and reading CP/day...', 'working');
             openCulturePointsOverview();
             await sleep(250);
@@ -1015,8 +1215,21 @@
             const townHalls = await scanAllVillages(requirement.readAtMs);
             attachVillageCp(townHalls.villages, culture);
 
-            const prediction = buildPrediction(requirement.current, requirement.target, culture.total, townHalls.celebrationEvents, requirement.readAtMs);
-            const result = { ...requirement, cpPerDay: culture.total, villageCp: culture.villageCp, prediction, townHalls };
+            const prediction = buildPrediction(
+                requirement.current,
+                requirement.target,
+                culture.total,
+                townHalls.celebrationEvents,
+                requirement.readAtMs
+            );
+
+            const result = {
+                ...requirement,
+                cpPerDay: culture.total,
+                villageCp: culture.villageCp,
+                prediction,
+                townHalls
+            };
 
             if (window.location.hash !== originalHash) {
                 window.location.hash = originalHash;
@@ -1025,11 +1238,14 @@
 
             lastScanResult = result;
             renderResult(result);
-            const hallCount = townHalls.villages.filter(v => v.hasTownHall).length;
-            setStatus(townHalls.complete
-                ? `CP scan complete. ${hallCount} Town Hall${hallCount === 1 ? '' : 's'} detected. Ready to plan.`
-                : `CP scan complete, but village scan may be incomplete (${townHalls.scannedCount} scanned).`,
-                townHalls.complete ? 'success' : 'error');
+
+            const hallCount = townHalls.villages.filter(village => village.hasTownHall).length;
+            setStatus(
+                townHalls.complete
+                    ? `CP scan complete. ${hallCount} Town Hall${hallCount === 1 ? '' : 's'} detected. Ready to plan.`
+                    : `CP scan complete, but village scan may be incomplete (${townHalls.scannedCount} scanned).`,
+                townHalls.complete ? 'success' : 'error'
+            );
         } catch (error) {
             console.error('[APES CP Manager] Scan failed.', error);
             if (window.location.hash !== originalHash) window.location.hash = originalHash;
@@ -1041,15 +1257,40 @@
         }
     }
 
+    function mountPlannerPanel() {
+        let planner = document.getElementById(PLANNER_ID);
+        if (planner) return planner;
+
+        planner = document.createElement('div');
+        planner.id = PLANNER_ID;
+        planner.innerHTML = `
+            <div class="qol-cp-planner-head">
+                <div class="qol-cp-planner-title-wrap"><span>CP Planner</span><span class="qol-cp-speed"></span></div>
+                <span class="qol-cp-planner-close" title="Close">&times;</span>
+            </div>
+            <div class="qol-cp-planner-body"></div>
+        `;
+
+        planner.querySelector('.qol-cp-planner-close').addEventListener('click', event => {
+            event.stopPropagation();
+            planner.style.setProperty('display', 'none', 'important');
+        });
+
+        document.body.appendChild(planner);
+        makeDraggable(planner, planner.querySelector('.qol-cp-planner-head'));
+        return planner;
+    }
+
     function mountPanel() {
         let panel = document.getElementById(PANEL_ID);
         if (panel) return panel;
+
         panel = document.createElement('div');
         panel.id = PANEL_ID;
         panel.innerHTML = `
             <div class="qol-cp-header"><span>CP Manager</span><span class="qol-cp-close" title="Close">&times;</span></div>
             <div class="qol-cp-body">
-                <div class="qol-cp-description">Scan CP progress, daily production, Town Halls and celebrations. After scanning, use <strong>Plan CP</strong> to model Town Hall levels and celebration strategies.</div>
+                <div class="qol-cp-description">Scan CP progress, daily production, Town Halls and celebrations. After scanning, use <strong>Plan CP</strong> to open the planner beside this window.</div>
                 <div class="qol-cp-controls">
                     <div class="qol-cp-action-btn qol-cp-scan-btn" role="button" tabindex="0">Scan CP</div>
                     <div class="qol-cp-action-btn secondary qol-cp-plan-btn hidden" role="button" tabindex="0">Plan CP</div>
@@ -1060,37 +1301,86 @@
                 <div class="qol-cp-townhalls qol-cp-box"></div>
                 <div class="qol-cp-celebrations"></div>
                 <div class="qol-cp-meta"></div>
-                <div class="qol-cp-planner"></div>
-            </div>`;
+            </div>
+        `;
 
-        panel.querySelector('.qol-cp-close').addEventListener('click', () => panel.style.setProperty('display', 'none', 'important'));
-        panel.querySelector('.qol-cp-scan-btn').addEventListener('click', event => { event.stopPropagation(); if (!isScanning) void scanCulturePoints(); });
-        panel.querySelector('.qol-cp-plan-btn').addEventListener('click', event => { event.stopPropagation(); togglePlanner(); });
+        const closeButton = panel.querySelector('.qol-cp-close');
+        closeButton.addEventListener('click', event => {
+            event.stopPropagation();
+            panel.style.setProperty('display', 'none', 'important');
+            document.getElementById(PLANNER_ID)?.style.setProperty('display', 'none', 'important');
+        });
+
+        const scanButton = panel.querySelector('.qol-cp-scan-btn');
+        scanButton.addEventListener('click', event => {
+            event.stopPropagation();
+            if (!isScanning) void scanCulturePoints();
+        });
+        scanButton.addEventListener('keydown', event => {
+            if ((event.key === 'Enter' || event.key === ' ') && !isScanning) {
+                event.preventDefault();
+                void scanCulturePoints();
+            }
+        });
+
+        const planButton = panel.querySelector('.qol-cp-plan-btn');
+        planButton.addEventListener('click', event => {
+            event.stopPropagation();
+            togglePlanner();
+        });
+        planButton.addEventListener('keydown', event => {
+            if (event.key === 'Enter' || event.key === ' ') {
+                event.preventDefault();
+                togglePlanner();
+            }
+        });
+
         document.body.appendChild(panel);
+        makeDraggable(panel, panel.querySelector('.qol-cp-header'), () => {
+            const planner = document.getElementById(PLANNER_ID);
+            if (planner && getComputedStyle(planner).display !== 'none' && planner.dataset.userPositioned !== 'true') {
+                positionPlannerBesideMain(true);
+            }
+        });
         return panel;
     }
 
     function togglePanel() {
         const panel = mountPanel();
+
         if (getComputedStyle(panel).display !== 'none') {
             panel.style.setProperty('display', 'none', 'important');
+            document.getElementById(PLANNER_ID)?.style.setProperty('display', 'none', 'important');
             return;
         }
+
         window.dispatchEvent(new CustomEvent('qol_close_others', { detail: { source: 'cpManager' } }));
         panel.style.setProperty('display', 'flex', 'important');
-        requestAnimationFrame(() => positionPanelUnderButton(panel));
+        requestAnimationFrame(() => positionPanelUnderButton(panel, panel.dataset.userPositioned !== 'true'));
     }
 
     function mountToggleButton() {
         let button = document.getElementById(TOGGLE_ID);
         if (button) return button;
+
         button = document.createElement('div');
         button.id = TOGGLE_ID;
         button.title = 'CP Manager';
         button.setAttribute('role', 'button');
         button.setAttribute('tabindex', '0');
         button.innerHTML = '<svg viewBox="0 0 24 24"><path d="M4 19V5"></path><path d="M4 19h16"></path><path d="M7 15l3-4 3 2 4-6"></path><path d="M16 7h3v3"></path></svg>';
-        button.addEventListener('click', event => { event.stopPropagation(); togglePanel(); });
+
+        const activate = event => {
+            event.preventDefault();
+            event.stopPropagation();
+            togglePanel();
+        };
+
+        button.addEventListener('click', activate);
+        button.addEventListener('keydown', event => {
+            if (event.key === 'Enter' || event.key === ' ') activate(event);
+        });
+
         document.body.appendChild(button);
         if (typeof window.qolRepositionAllButtons === 'function') window.qolRepositionAllButtons();
         return button;
@@ -1099,20 +1389,35 @@
     function positionToggleButton() {
         const button = document.getElementById(TOGGLE_ID) || mountToggleButton();
         const villageList = document.getElementById('villageList');
+
         if (!isEnabled() || !villageList) {
             button.style.setProperty('display', 'none', 'important');
             return;
         }
+
         const villageRect = villageList.getBoundingClientRect();
         if (villageRect.width <= 0 || villageRect.height <= 0) return;
-        const ids = ['qol-cog-btn','qol-help-toggle-btn','qol-ir-toggle-btn','qol-wm-toggle-btn','qol-watchlist-toggle','qol-checklist-toggle-btn','qol-npc-calc-toggle-btn','qol-oasis-toggle-btn','qol-report-archive-toggle'];
+
+        const precedingIds = [
+            'qol-cog-btn',
+            'qol-help-toggle-btn',
+            'qol-ir-toggle-btn',
+            'qol-wm-toggle-btn',
+            'qol-watchlist-toggle',
+            'qol-checklist-toggle-btn',
+            'qol-npc-calc-toggle-btn',
+            'qol-oasis-toggle-btn',
+            'qol-report-archive-toggle'
+        ];
+
         let left = villageRect.right + 20;
-        ids.forEach(id => {
-            const el = document.getElementById(id);
-            if (!el || getComputedStyle(el).display === 'none') return;
-            const rect = el.getBoundingClientRect();
+        precedingIds.forEach(id => {
+            const element = document.getElementById(id);
+            if (!element || getComputedStyle(element).display === 'none') return;
+            const rect = element.getBoundingClientRect();
             if (rect.width > 0) left = Math.max(left, rect.right + 6);
         });
+
         button.style.setProperty('left', `${left}px`, 'important');
         button.style.setProperty('top', `${villageRect.top + 4}px`, 'important');
         button.style.setProperty('display', 'flex', 'important');
@@ -1126,14 +1431,26 @@
     function ensureSettingsCard() {
         const grid = document.querySelector('#qol-modal .qol-feature-grid');
         if (!grid) return;
+
         let checkbox = grid.querySelector(`#${MENU_CHECKBOX_ID}`);
         if (!checkbox) {
             const card = document.createElement('article');
             card.className = 'qol-feature-card';
-            card.innerHTML = `<span class="qol-feature-icon">CP</span><div class="qol-feature-copy"><h3 class="qol-feature-name">CP Manager</h3><p class="qol-feature-desc">Tracks and plans CP, Town Halls and celebrations across your villages.</p></div><label class="qol-switch"><input type="checkbox" id="${MENU_CHECKBOX_ID}" class="qol-checkbox"><span class="qol-switch-track"></span></label>`;
+            card.innerHTML = `
+                <span class="qol-feature-icon">CP</span>
+                <div class="qol-feature-copy">
+                    <h3 class="qol-feature-name">CP Manager</h3>
+                    <p class="qol-feature-desc">Tracks and plans CP, Town Halls and celebrations across your villages.</p>
+                </div>
+                <label class="qol-switch">
+                    <input type="checkbox" id="${MENU_CHECKBOX_ID}" class="qol-checkbox">
+                    <span class="qol-switch-track"></span>
+                </label>
+            `;
             grid.appendChild(card);
             checkbox = card.querySelector(`#${MENU_CHECKBOX_ID}`);
         }
+
         checkbox.checked = isEnabled();
         if (checkbox.dataset.qolCpBound !== 'true') {
             checkbox.dataset.qolCpBound = 'true';
@@ -1143,6 +1460,7 @@
 
     function destroyUI() {
         document.getElementById(PANEL_ID)?.remove();
+        document.getElementById(PLANNER_ID)?.remove();
         document.getElementById(TOGGLE_ID)?.remove();
         lastScanResult = null;
         isScanning = false;
@@ -1154,6 +1472,7 @@
         if (!isEnabled()) return destroyUI();
         injectStyles();
         mountPanel();
+        mountPlannerPanel();
         mountToggleButton();
         positionToggleButton();
     }
@@ -1161,16 +1480,32 @@
     window.addEventListener('qol_setting_changed', event => {
         if (event.detail?.key === FEATURE_KEY) ensureUI();
     });
+
     window.addEventListener('qol_close_others', event => {
-        if (event.detail?.source !== 'cpManager') document.getElementById(PANEL_ID)?.style.setProperty('display', 'none', 'important');
+        if (event.detail?.source === 'cpManager') return;
+        document.getElementById(PANEL_ID)?.style.setProperty('display', 'none', 'important');
+        document.getElementById(PLANNER_ID)?.style.setProperty('display', 'none', 'important');
     });
+
     window.addEventListener('resize', () => {
         positionToggleButton();
         const panel = document.getElementById(PANEL_ID);
-        if (panel && getComputedStyle(panel).display !== 'none') positionPanelUnderButton(panel);
+        const planner = document.getElementById(PLANNER_ID);
+        if (panel && getComputedStyle(panel).display !== 'none') clampPanelToViewport(panel);
+        if (planner && getComputedStyle(planner).display !== 'none') {
+            if (planner.dataset.userPositioned === 'true') clampPanelToViewport(planner);
+            else positionPlannerBesideMain(true);
+        }
     });
+
     document.addEventListener('keydown', event => {
-        if (event.key === 'Escape') document.getElementById(PANEL_ID)?.style.setProperty('display', 'none', 'important');
+        if (event.key !== 'Escape') return;
+        const planner = document.getElementById(PLANNER_ID);
+        if (planner && getComputedStyle(planner).display !== 'none') {
+            planner.style.setProperty('display', 'none', 'important');
+            return;
+        }
+        document.getElementById(PANEL_ID)?.style.setProperty('display', 'none', 'important');
     }, true);
 
     if (document.readyState === 'loading') {
@@ -1178,6 +1513,7 @@
     } else {
         ensureUI();
     }
+
     window.setInterval(ensureUI, 1200);
-    console.log('[APES CP Manager] Planner-enabled module initialized.');
+    console.log('[APES CP Manager] Side-planner module initialized.');
 })();

@@ -989,8 +989,10 @@
             .map(event => ({ ...event, source: 'queued' }))
             .sort((a, b) => a.startMs - b.startMs);
 
+        // Every configured row schedules at least one future celebration.
+        // 24/7 only controls whether that celebration repeats after the first one.
         const sequences = plans
-            .filter(plan => plan.run247 && plan.level > 0 && plan.durationSeconds > 0 && plan.reward > 0)
+            .filter(plan => plan.level > 0 && plan.durationSeconds > 0 && plan.reward > 0)
             .map(plan => ({
                 ...plan,
                 nextStartMs: Math.max(now, plan.busyUntilMs || now),
@@ -1037,7 +1039,12 @@
             if (next.source === 'queued') {
                 fixed.shift();
             } else if (sequence) {
-                sequence.nextStartMs += sequence.durationSeconds * 1000;
+                if (sequence.run247) {
+                    sequence.nextStartMs += sequence.durationSeconds * 1000;
+                } else {
+                    const index = sequences.indexOf(sequence);
+                    if (index >= 0) sequences.splice(index, 1);
+                }
             }
         }
 
@@ -1050,7 +1057,8 @@
         if (!planner) return;
 
         const speedInfo = detectServerSpeed(lastScanResult);
-        let totalCelebrationCpDay = 0;
+        let recurringCelebrationCpDay = 0;
+        let oneOffCelebrationCp = 0;
 
         planner.querySelectorAll('.qol-cp-plan-row').forEach(row => {
             const index = Number.parseInt(row.dataset.index, 10);
@@ -1073,15 +1081,30 @@
             const reward = level > 0
                 ? (type === 'big' ? getBigReward(lastScanResult) : getSmallReward(village))
                 : 0;
-            const cpDay = run247Input.checked && duration > 0
+
+            const recurringCpDay = run247Input.checked && duration > 0
                 ? reward * 86400 / duration
                 : 0;
+            const displayedContribution = run247Input.checked
+                ? recurringCpDay
+                : reward;
 
-            totalCelebrationCpDay += cpDay;
+            if (run247Input.checked) {
+                recurringCelebrationCpDay += recurringCpDay;
+            } else {
+                oneOffCelebrationCp += reward;
+            }
+
             row.querySelector('.qol-cp-plan-duration').textContent = duration ? secondsToTimeString(duration) : '-';
-            row.querySelector('.qol-cp-plan-cpday').textContent = cpDay > 0 ? formatNumber(cpDay) : '-';
+            row.querySelector('.qol-cp-plan-cpday').textContent = displayedContribution > 0
+                ? formatNumber(displayedContribution)
+                : '-';
             row.querySelector('.qol-cp-plan-cpday').title = reward > 0
-                ? `${formatNumber(reward)} CP per celebration${run247Input.checked ? ', repeated 24/7' : ''}`
+                ? (
+                    run247Input.checked
+                        ? `${formatNumber(reward)} CP per celebration, repeated 24/7 (${formatNumber(recurringCpDay)} average CP/day)`
+                        : `${formatNumber(reward)} CP from one planned celebration`
+                )
                 : '';
         });
 
@@ -1089,8 +1112,8 @@
         const prediction = buildPlannerPrediction(lastScanResult, plans);
 
         planner.querySelector('.qol-cp-plan-base').textContent = formatNumber(lastScanResult.cpPerDay);
-        planner.querySelector('.qol-cp-plan-celebrations').textContent = formatNumber(totalCelebrationCpDay);
-        planner.querySelector('.qol-cp-plan-combined').textContent = formatNumber(lastScanResult.cpPerDay + totalCelebrationCpDay);
+        planner.querySelector('.qol-cp-plan-celebrations').textContent = formatNumber(recurringCelebrationCpDay);
+        planner.querySelector('.qol-cp-plan-oneoff').textContent = formatNumber(oneOffCelebrationCp);
         planner.querySelector('.qol-cp-plan-eta').textContent = prediction.text;
         planner.querySelector('.qol-cp-speed').textContent = `Detected x${speedInfo.speed} · ${speedInfo.source}`;
     }
@@ -1144,16 +1167,16 @@
             <div class="qol-cp-planner-summary">
                 <div class="qol-cp-plan-stat"><span>Base CP / Day</span><strong class="qol-cp-plan-base">-</strong></div>
                 <div class="qol-cp-plan-stat"><span>24/7 Celebration CP / Day</span><strong class="qol-cp-plan-celebrations">-</strong></div>
-                <div class="qol-cp-plan-stat"><span>Combined Avg. CP / Day</span><strong class="qol-cp-plan-combined">-</strong></div>
+                <div class="qol-cp-plan-stat"><span>One-off Celebration CP</span><strong class="qol-cp-plan-oneoff">-</strong></div>
                 <div class="qol-cp-plan-stat"><span>Planner ETA</span><strong class="qol-cp-plan-eta" style="font-size:10px!important">-</strong></div>
             </div>
             <div class="qol-cp-planner-table-wrap">
                 <table class="qol-cp-planner-table">
-                    <thead><tr><th>Village</th><th>Town Hall</th><th>Celebration</th><th>24/7</th><th>Duration</th><th>Extra CP / Day</th></tr></thead>
+                    <thead><tr><th>Village</th><th>Town Hall</th><th>Celebration</th><th>24/7</th><th>Duration</th><th>Extra CP / Day*</th></tr></thead>
                     <tbody>${rows}</tbody>
                 </table>
             </div>
-            <div class="qol-cp-plan-note">Tick <strong>24/7</strong> to include continuous celebrations from that village in the planner. Big Celebration becomes available at Town Hall level 10. Existing Town Hall rows start at their scanned level; villages without one start at 0. Town Hall construction/upgrade time and resource costs are not included yet.</div>
+            <div class="qol-cp-plan-note">Every village with a selected Town Hall level plans <strong>one</strong> selected celebration. Leave <strong>24/7</strong> unticked to count that celebration once; tick it to repeat the celebration continuously after the first one. In the last column, unticked rows show the one-off CP reward, while ticked rows show average recurring CP/day. Big Celebration becomes available at Town Hall level 10. Town Hall construction/upgrade time and resource costs are not included yet.</div>
         `;
 
         planner.querySelector('.qol-cp-speed').textContent = `Detected x${speedInfo.speed} · ${speedInfo.source}`;
@@ -1515,5 +1538,5 @@
     }
 
     window.setInterval(ensureUI, 1200);
-    console.log('[APES CP Manager] Side-planner module initialized.');
+    console.log('[APES CP Manager] One-off + 24/7 planner module initialized.');
 })();

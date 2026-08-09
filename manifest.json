@@ -40,7 +40,6 @@
         "features/npcCalculator.js",
         "features/auctionHouseScanner.js",
         "features/cpManager.js",
-        "features/cpScanLock.js",
         "features/help.js",
         "features/content.js"
       ],

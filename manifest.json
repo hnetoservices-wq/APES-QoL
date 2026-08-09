@@ -41,6 +41,7 @@
         "features/auctionHouseScanner.js",
         "features/cpManager.js",
         "features/cpPrediction.js",
+        "features/cpTownHallScanner.js",
         "features/help.js",
         "features/content.js"
       ],

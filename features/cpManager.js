@@ -6,7 +6,9 @@
  * - Scan current/target CP and CP/day.
  * - Scan every village for Town Halls and queued celebrations.
  * - Predict the next CP target using queued celebration start times.
- * - After a scan, open a side-by-side CP Planner for Town Hall / celebration planning.
+ * - Identify the next expansion slot from the fixed CP slot table.
+ * - Plan toward any expansion slot up to slot 50.
+ * - Show a five-slot CP roadmap using the active celebration plan.
  * - Simulate 24/7 celebrations for a user-defined planning period.
  * - Lock the game screen while automated CP scanning is running.
  */
@@ -27,6 +29,61 @@
     const DAY_MS = 86400000;
     const SMALL_CELEBRATION_CAP = 500;
     const BIG_CELEBRATION_CAP = 2000;
+
+    // Fixed Culture Point thresholds for expansion slots 1-50.
+    // Source: Travian Kingdoms Help Center - Culture points.
+    const CP_SLOT_TARGETS = Object.freeze([
+        0,
+        1000,
+        5000,
+        10000,
+        20000,
+        40000,
+        70000,
+        110000,
+        150000,
+        210000,
+        270000,
+        350000,
+        430000,
+        530000,
+        640000,
+        750000,
+        880000,
+        1030000,
+        1180000,
+        1350000,
+        1530000,
+        1720000,
+        1930000,
+        2150000,
+        2390000,
+        2640000,
+        2900000,
+        3170000,
+        3470000,
+        3770000,
+        4090000,
+        4430000,
+        4780000,
+        5150000,
+        5530000,
+        5930000,
+        6340000,
+        6770000,
+        7220000,
+        7680000,
+        8160000,
+        8650000,
+        9170000,
+        9690000,
+        10240000,
+        10800000,
+        11380000,
+        11980000,
+        12600000,
+        13230000
+    ]);
 
     const CELEBRATION_DURATIONS_X1 = {
         1:  { small: '24:00:00' },
@@ -108,6 +165,32 @@
         return Number.isFinite(base) ? Math.round(base / speed) : null;
     }
 
+    function getSlotTarget(slot) {
+        const index = Number.parseInt(slot, 10) - 1;
+        return index >= 0 && index < CP_SLOT_TARGETS.length
+            ? CP_SLOT_TARGETS[index]
+            : null;
+    }
+
+    function findSlotByTarget(target) {
+        if (!Number.isFinite(target)) return null;
+        const index = CP_SLOT_TARGETS.findIndex(value => value === target);
+        return index >= 0 ? index + 1 : null;
+    }
+
+    function getNextExpansionSlot(result) {
+        const scannedSlot = findSlotByTarget(result?.target);
+        if (scannedSlot) return scannedSlot;
+
+        const current = Number(result?.current || 0);
+        const index = CP_SLOT_TARGETS.findIndex(target => target > current);
+        return index >= 0 ? index + 1 : CP_SLOT_TARGETS.length;
+    }
+
+    function formatSlotOption(slot) {
+        return `Slot ${slot} — ${formatNumber(getSlotTarget(slot))} CP`;
+    }
+
     function getOrdinalSuffix(day) {
         const n = day % 100;
         if (n >= 11 && n <= 13) return 'th';
@@ -123,6 +206,15 @@
         const hours = String(date.getHours()).padStart(2, '0');
         const minutes = String(date.getMinutes()).padStart(2, '0');
         return `${day}${getOrdinalSuffix(day)} ${month}, at ${hours}h${minutes}m`;
+    }
+
+    function formatRoadmapDate(date) {
+        if (!(date instanceof Date) || Number.isNaN(date.getTime())) return '-';
+        const day = date.getDate();
+        const month = date.toLocaleString('en-GB', { month: 'short' });
+        const hours = String(date.getHours()).padStart(2, '0');
+        const minutes = String(date.getMinutes()).padStart(2, '0');
+        return `${day} ${month} ${hours}h${minutes}`;
     }
 
     function formatPredictionResult(targetMs, celebrationsApplied = []) {
@@ -216,7 +308,7 @@
             #${PANEL_ID},#${PANEL_ID} *,#${PLANNER_ID},#${PLANNER_ID} *{box-sizing:border-box!important;font-family:Arial,Helvetica,sans-serif!important;text-shadow:none!important}
             #${PANEL_ID},#${PLANNER_ID}{position:fixed!important;display:none;flex-direction:column!important;border:3px solid #634d31!important;border-radius:4px!important;background:#f7f5f0!important;color:#333!important;box-shadow:0 10px 30px rgba(0,0,0,.5)!important;overflow:hidden!important;z-index:999999!important}
             #${PANEL_ID}{width:560px!important;max-width:94vw!important;max-height:86vh!important}
-            #${PLANNER_ID}{width:680px!important;max-width:94vw!important;max-height:86vh!important;z-index:1000000!important}
+            #${PLANNER_ID}{width:720px!important;max-width:94vw!important;max-height:86vh!important;z-index:1000000!important}
 
             #${PANEL_ID} .qol-cp-header,#${PLANNER_ID} .qol-cp-planner-head{height:34px!important;padding:6px 10px!important;background:linear-gradient(to bottom,#6d5436,#543f26)!important;color:#f7f5f0!important;font-size:14px!important;font-weight:bold!important;display:flex!important;align-items:center!important;justify-content:space-between!important;flex:0 0 auto!important;cursor:move!important;user-select:none!important}
             #${PANEL_ID} .qol-cp-close,#${PLANNER_ID} .qol-cp-planner-close{cursor:pointer!important;color:#fff!important;font-size:21px!important;font-weight:bold!important;line-height:1!important;padding:0 5px!important;border-radius:3px!important;background:rgba(0,0,0,.2)!important}
@@ -264,11 +356,14 @@
             #${PLANNER_ID} .qol-cp-plan-stat{padding:6px 8px!important;background:#fff!important;border:1px solid #d3c4aa!important;border-radius:3px!important;min-width:0!important}
             #${PLANNER_ID} .qol-cp-plan-stat span{display:block!important;color:#77654d!important;font-size:8px!important;font-weight:bold!important;text-transform:uppercase!important}
             #${PLANNER_ID} .qol-cp-plan-stat strong{display:block!important;margin-top:2px!important;color:#3f3020!important;font-size:13px!important;overflow:hidden!important;text-overflow:ellipsis!important}
-            #${PLANNER_ID} .qol-cp-period-control{display:flex!important;align-items:center!important;gap:7px!important;padding:7px 9px!important;background:#f4eee2!important;border-bottom:1px solid #d6c8ae!important;color:#5b4630!important;font-size:10px!important;flex:0 0 auto!important}
-            #${PLANNER_ID} .qol-cp-period-control strong{font-size:10px!important;color:#4f3b24!important}
-            #${PLANNER_ID} .qol-cp-period-input{appearance:auto!important;-webkit-appearance:auto!important;width:70px!important;height:25px!important;padding:2px 5px!important;border:1px solid #a99473!important;border-radius:3px!important;background:#fff!important;color:#493821!important;font-size:11px!important;text-align:center!important}
-            #${PLANNER_ID} .qol-cp-period-hint{color:#84735d!important;font-size:9px!important}
-            #${PLANNER_ID} .qol-cp-planner-table-wrap{overflow:auto!important;max-height:52vh!important;background:#fff!important}
+            #${PLANNER_ID} .qol-cp-planner-controls{display:grid!important;grid-template-columns:minmax(0,1.15fr) minmax(0,.85fr)!important;gap:6px!important;padding:7px 8px!important;background:#f4eee2!important;border-bottom:1px solid #d6c8ae!important;flex:0 0 auto!important}
+            #${PLANNER_ID} .qol-cp-target-control,#${PLANNER_ID} .qol-cp-period-control{display:flex!important;align-items:center!important;gap:7px!important;min-width:0!important;padding:6px 7px!important;background:#fffaf0!important;border:1px solid #d6c8ae!important;border-radius:3px!important;color:#5b4630!important;font-size:10px!important}
+            #${PLANNER_ID} .qol-cp-target-control strong,#${PLANNER_ID} .qol-cp-period-control strong{font-size:9px!important;color:#4f3b24!important;text-transform:uppercase!important;white-space:nowrap!important}
+            #${PLANNER_ID} .qol-cp-target-select{appearance:auto!important;-webkit-appearance:auto!important;min-width:190px!important;max-width:250px!important;height:26px!important;padding:2px 5px!important;border:1px solid #a99473!important;border-radius:3px!important;background:#fff!important;color:#493821!important;font-size:10px!important}
+            #${PLANNER_ID} .qol-cp-target-remaining{margin-left:auto!important;color:#7d6342!important;font-size:9px!important;font-weight:bold!important;white-space:nowrap!important}
+            #${PLANNER_ID} .qol-cp-period-input{appearance:auto!important;-webkit-appearance:auto!important;width:65px!important;height:25px!important;padding:2px 5px!important;border:1px solid #a99473!important;border-radius:3px!important;background:#fff!important;color:#493821!important;font-size:11px!important;text-align:center!important}
+            #${PLANNER_ID} .qol-cp-period-hint{color:#84735d!important;font-size:9px!important;overflow:hidden!important;text-overflow:ellipsis!important;white-space:nowrap!important}
+            #${PLANNER_ID} .qol-cp-planner-table-wrap{overflow:auto!important;max-height:34vh!important;background:#fff!important}
             #${PLANNER_ID} .qol-cp-planner-table th:nth-child(1),#${PLANNER_ID} .qol-cp-planner-table td:nth-child(1){width:24%!important}
             #${PLANNER_ID} .qol-cp-planner-table th:nth-child(2),#${PLANNER_ID} .qol-cp-planner-table td:nth-child(2){width:14%!important;text-align:center!important}
             #${PLANNER_ID} .qol-cp-planner-table th:nth-child(3),#${PLANNER_ID} .qol-cp-planner-table td:nth-child(3){width:17%!important;text-align:center!important}
@@ -276,10 +371,19 @@
             #${PLANNER_ID} .qol-cp-planner-table th:nth-child(5),#${PLANNER_ID} .qol-cp-planner-table td:nth-child(5){width:17%!important;text-align:center!important}
             #${PLANNER_ID} .qol-cp-planner-table th:nth-child(6),#${PLANNER_ID} .qol-cp-planner-table td:nth-child(6){width:18%!important;text-align:right!important}
             #${PLANNER_ID} .qol-cp-plan-select{display:inline-block!important;appearance:auto!important;-webkit-appearance:auto!important;width:100%!important;min-width:64px!important;max-width:112px!important;height:28px!important;line-height:normal!important;padding:3px 6px!important;border:1px solid #a99473!important;border-radius:3px!important;background-color:#fff!important;color:#493821!important;-webkit-text-fill-color:#493821!important;font-size:11px!important;font-weight:normal!important;opacity:1!important;visibility:visible!important}
-            #${PLANNER_ID} .qol-cp-plan-select option{background:#fff!important;color:#493821!important;font-size:11px!important}
+            #${PLANNER_ID} .qol-cp-plan-select option,#${PLANNER_ID} .qol-cp-target-select option{background:#fff!important;color:#493821!important;font-size:10px!important}
             #${PLANNER_ID} .qol-cp-plan-select:disabled{background:#eee8dc!important;color:#8b7d69!important;-webkit-text-fill-color:#8b7d69!important;opacity:.75!important}
             #${PLANNER_ID} .qol-cp-247-check{appearance:auto!important;-webkit-appearance:checkbox!important;width:16px!important;height:16px!important;margin:0!important;vertical-align:middle!important;cursor:pointer!important;opacity:1!important;visibility:visible!important}
             #${PLANNER_ID} .qol-cp-247-check:disabled{opacity:.4!important;cursor:default!important}
+            #${PLANNER_ID} .qol-cp-roadmap{background:#fff!important;border-top:1px solid #d6c8ae!important;flex:0 0 auto!important}
+            #${PLANNER_ID} .qol-cp-roadmap-head{display:flex!important;align-items:center!important;justify-content:space-between!important;padding:6px 9px!important;background:#e9dfcc!important;color:#4f3b24!important;font-size:9px!important;font-weight:bold!important;text-transform:uppercase!important}
+            #${PLANNER_ID} .qol-cp-roadmap-head span:last-child{font-weight:normal!important;text-transform:none!important;color:#7a6a55!important}
+            #${PLANNER_ID} .qol-cp-roadmap-wrap{max-height:138px!important;overflow:auto!important}
+            #${PLANNER_ID} .qol-cp-roadmap-table th:nth-child(1),#${PLANNER_ID} .qol-cp-roadmap-table td:nth-child(1){width:15%!important;text-align:center!important}
+            #${PLANNER_ID} .qol-cp-roadmap-table th:nth-child(2),#${PLANNER_ID} .qol-cp-roadmap-table td:nth-child(2){width:27%!important;text-align:right!important}
+            #${PLANNER_ID} .qol-cp-roadmap-table th:nth-child(3),#${PLANNER_ID} .qol-cp-roadmap-table td:nth-child(3){width:27%!important;text-align:right!important}
+            #${PLANNER_ID} .qol-cp-roadmap-table th:nth-child(4),#${PLANNER_ID} .qol-cp-roadmap-table td:nth-child(4){width:31%!important;text-align:right!important}
+            #${PLANNER_ID} .qol-cp-roadmap-row.selected td{background:#fff6e5!important;color:#4f3b24!important;font-weight:bold!important}
             #${PLANNER_ID} .qol-cp-plan-note{padding:7px 9px!important;color:#786750!important;font-size:9px!important;line-height:1.45!important;background:#fffaf0!important;border-top:1px solid #d6c8ae!important;flex:0 0 auto!important}
         `;
         document.head.appendChild(style);
@@ -347,8 +451,8 @@
         if (!force && planner.dataset.userPositioned === 'true') return;
 
         const mainRect = main.getBoundingClientRect();
-        const plannerWidth = planner.offsetWidth || 680;
-        const plannerHeight = planner.offsetHeight || 440;
+        const plannerWidth = planner.offsetWidth || 720;
+        const plannerHeight = planner.offsetHeight || 520;
         const preferredLeft = mainRect.right + 10;
         let left = preferredLeft;
 
@@ -966,19 +1070,20 @@
         const progress = result.target > 0
             ? Math.max(0, Math.min(100, (result.current / result.target) * 100))
             : 0;
+        const nextSlot = getNextExpansionSlot(result);
 
         const results = panel.querySelector('.qol-cp-results');
         results.innerHTML = `
             <div class="qol-cp-card"><span class="qol-cp-card-label">Current CP</span><span class="qol-cp-card-value">${formatNumber(result.current)}</span></div>
-            <div class="qol-cp-card"><span class="qol-cp-card-label">Target CP</span><span class="qol-cp-card-value">${formatNumber(result.target)}</span></div>
+            <div class="qol-cp-card"><span class="qol-cp-card-label">Next Expansion</span><span class="qol-cp-card-value">Slot ${nextSlot} · ${formatNumber(result.target)} CP</span></div>
             <div class="qol-cp-card"><span class="qol-cp-card-label">Remaining CP</span><span class="qol-cp-card-value">${formatNumber(remaining)}</span></div>
             <div class="qol-cp-card highlight"><span class="qol-cp-card-label">Total CP / Day</span><span class="qol-cp-card-value">${formatNumber(result.cpPerDay)}</span></div>
-            <div class="qol-cp-card highlight full-width"><span class="qol-cp-card-label">Prediction</span><span class="qol-cp-card-value">${escapeHtml(result.prediction.text)}</span></div>
+            <div class="qol-cp-card highlight full-width"><span class="qol-cp-card-label">Slot ${nextSlot} Prediction</span><span class="qol-cp-card-value">${escapeHtml(result.prediction.text)}</span></div>
         `;
         results.style.setProperty('display', 'grid', 'important');
 
         const progressBox = panel.querySelector('.qol-cp-progress-box');
-        progressBox.querySelector('.qol-cp-progress-head').innerHTML = `<span>${formatNumber(result.current)} / ${formatNumber(result.target)}</span><span>${progress.toFixed(1)}%</span>`;
+        progressBox.querySelector('.qol-cp-progress-head').innerHTML = `<span>Slot ${nextSlot}: ${formatNumber(result.current)} / ${formatNumber(result.target)}</span><span>${progress.toFixed(1)}%</span>`;
         progressBox.querySelector('.qol-cp-progress-bar').style.setProperty('width', `${progress.toFixed(2)}%`, 'important');
         progressBox.style.setProperty('display', 'block', 'important');
 
@@ -986,7 +1091,7 @@
         renderCelebrations(result.townHalls);
 
         const meta = panel.querySelector('.qol-cp-meta');
-        meta.innerHTML = `CP requirement read from <strong>${escapeHtml(result.villageName)}</strong>${result.skippedCities ? ` after skipping ${result.skippedCities} ${result.skippedCities === 1 ? 'city' : 'cities'}` : ''}. CP/day is continuous production; celebration CP is applied when each celebration starts.`;
+        meta.innerHTML = `CP requirement read from <strong>${escapeHtml(result.villageName)}</strong>${result.skippedCities ? ` after skipping ${result.skippedCities} ${result.skippedCities === 1 ? 'city' : 'cities'}` : ''}. The scanned target maps to expansion <strong>Slot ${nextSlot}</strong>. CP/day is continuous production; celebration CP is applied when each celebration starts.`;
         meta.style.setProperty('display', 'block', 'important');
         setPlanButtonVisible(true);
     }
@@ -1006,6 +1111,22 @@
         const value = Number.parseFloat(input?.value || '1');
         if (!Number.isFinite(value) || value <= 0) return 1;
         return Math.min(365, Math.max(0.25, value));
+    }
+
+    function getPlannerTargetSlot() {
+        const select = document.querySelector(`#${PLANNER_ID} .qol-cp-target-select`);
+        const value = Number.parseInt(select?.value || '', 10);
+        if (Number.isFinite(value) && value >= 1 && value <= CP_SLOT_TARGETS.length) return value;
+        return lastScanResult ? getNextExpansionSlot(lastScanResult) : null;
+    }
+
+    function buildTargetSlotOptions(result) {
+        const startSlot = getNextExpansionSlot(result);
+        const options = [];
+        for (let slot = startSlot; slot <= CP_SLOT_TARGETS.length; slot += 1) {
+            options.push(`<option value="${slot}"${slot === startSlot ? ' selected' : ''}>${formatSlotOption(slot)}</option>`);
+        }
+        return options.join('');
     }
 
     function count247StartsInPeriod(durationSeconds, busyUntilMs, periodDays, now = Date.now()) {
@@ -1047,7 +1168,8 @@
         });
     }
 
-    function buildPlannerPrediction(result, plans, periodDays) {
+    function buildPlannerPrediction(result, plans, periodDays, targetCp = result.target) {
+        const effectiveTarget = Number.isFinite(targetCp) ? targetCp : result.target;
         const now = Date.now();
         const planEndMs = now + (periodDays * DAY_MS);
         const rate = result.cpPerDay > 0 ? result.cpPerDay / DAY_MS : 0;
@@ -1057,7 +1179,7 @@
             if (event.startMs > result.readAtMs && event.startMs <= now) estimatedCurrent += event.reward;
         });
 
-        if (estimatedCurrent >= result.target) return formatPredictionResult(now, []);
+        if (estimatedCurrent >= effectiveTarget) return formatPredictionResult(now, []);
 
         const fixedEvents = result.townHalls.celebrationEvents
             .filter(event => event.startMs > now)
@@ -1098,18 +1220,18 @@
 
             if (!next) {
                 if (rate <= 0) return { text: 'Planner ETA unavailable', targetDate: null, exactMinutes: null };
-                return formatPredictionResult(cursor + ((result.target - cp) / rate), applied);
+                return formatPredictionResult(cursor + ((effectiveTarget - cp) / rate), applied);
             }
 
             const cpBefore = cp + ((next.startMs - cursor) * rate);
-            if (rate > 0 && cpBefore >= result.target) {
-                return formatPredictionResult(cursor + ((result.target - cp) / rate), applied);
+            if (rate > 0 && cpBefore >= effectiveTarget) {
+                return formatPredictionResult(cursor + ((effectiveTarget - cp) / rate), applied);
             }
 
             cp = cpBefore + next.reward;
             cursor = next.startMs;
             applied.push(next);
-            if (cp >= result.target) return formatPredictionResult(next.startMs, applied);
+            if (cp >= effectiveTarget) return formatPredictionResult(next.startMs, applied);
 
             if (next.source === 'queued') {
                 fixed.shift();
@@ -1130,6 +1252,37 @@
         return { text: 'Planner ETA exceeded calculation range', targetDate: null, exactMinutes: null };
     }
 
+    function updateRoadmap(planner, plans, periodDays, selectedSlot) {
+        const body = planner.querySelector('.qol-cp-roadmap-body');
+        if (!body || !lastScanResult) return;
+
+        const startSlot = getNextExpansionSlot(lastScanResult);
+        const endSlot = Math.min(CP_SLOT_TARGETS.length, startSlot + 4);
+        const rows = [];
+
+        for (let slot = startSlot; slot <= endSlot; slot += 1) {
+            const target = getSlotTarget(slot);
+            const remaining = Math.max(0, target - lastScanResult.current);
+            const prediction = buildPlannerPrediction(lastScanResult, plans, periodDays, target);
+            const eta = target <= lastScanResult.current
+                ? 'Unlocked'
+                : prediction.targetDate
+                    ? formatRoadmapDate(prediction.targetDate)
+                    : '-';
+
+            rows.push(`
+                <tr class="qol-cp-roadmap-row${slot === selectedSlot ? ' selected' : ''}">
+                    <td>Slot ${slot}</td>
+                    <td>${formatNumber(target)}</td>
+                    <td>${formatNumber(remaining)}</td>
+                    <td title="${escapeHtml(prediction.text || '')}">${escapeHtml(eta)}</td>
+                </tr>
+            `);
+        }
+
+        body.innerHTML = rows.join('');
+    }
+
     function updatePlanner() {
         if (!lastScanResult) return;
         const planner = document.getElementById(PLANNER_ID);
@@ -1137,6 +1290,8 @@
 
         const speedInfo = detectServerSpeed(lastScanResult);
         const periodDays = getPlannerPeriodDays();
+        const targetSlot = getPlannerTargetSlot() || getNextExpansionSlot(lastScanResult);
+        const targetCp = getSlotTarget(targetSlot) ?? lastScanResult.target;
         const now = Date.now();
         let total247CpPeriod = 0;
         let oneOffCelebrationCp = 0;
@@ -1185,13 +1340,18 @@
         });
 
         const plans = readPlannerPlans();
-        const prediction = buildPlannerPrediction(lastScanResult, plans, periodDays);
+        const prediction = buildPlannerPrediction(lastScanResult, plans, periodDays, targetCp);
+        const remainingToTarget = Math.max(0, targetCp - lastScanResult.current);
 
         planner.querySelector('.qol-cp-plan-base').textContent = formatNumber(lastScanResult.cpPerDay);
         planner.querySelector('.qol-cp-plan-celebrations').textContent = formatNumber(total247CpPeriod);
         planner.querySelector('.qol-cp-plan-oneoff').textContent = formatNumber(oneOffCelebrationCp);
         planner.querySelector('.qol-cp-plan-eta').textContent = prediction.text;
+        planner.querySelector('.qol-cp-plan-eta').title = prediction.text;
+        planner.querySelector('.qol-cp-target-remaining').textContent = `${formatNumber(remainingToTarget)} CP remaining`;
         planner.querySelector('.qol-cp-speed').textContent = `Detected x${speedInfo.speed} · ${speedInfo.source}`;
+
+        updateRoadmap(planner, plans, periodDays, targetSlot);
     }
 
     function buildLevelOptions(village) {
@@ -1215,6 +1375,7 @@
         if (!lastScanResult) return;
         const planner = mountPlannerPanel();
         const speedInfo = detectServerSpeed(lastScanResult);
+        const nextSlot = getNextExpansionSlot(lastScanResult);
 
         const rows = lastScanResult.townHalls.villages.map((village, index) => {
             const startLevel = village.hasTownHall ? Math.max(1, village.level) : 0;
@@ -1246,11 +1407,18 @@
                 <div class="qol-cp-plan-stat"><span>One-off Celebration CP</span><strong class="qol-cp-plan-oneoff">-</strong></div>
                 <div class="qol-cp-plan-stat"><span>Planner ETA</span><strong class="qol-cp-plan-eta" style="font-size:10px!important">-</strong></div>
             </div>
-            <div class="qol-cp-period-control">
-                <strong>24/7 planning period</strong>
-                <input type="number" class="qol-cp-period-input" min="0.25" max="365" step="0.25" value="1" aria-label="24/7 celebration planning period in days">
-                <span>days</span>
-                <span class="qol-cp-period-hint">Only celebration starts inside this period count toward 24/7 CP.</span>
+            <div class="qol-cp-planner-controls">
+                <div class="qol-cp-target-control">
+                    <strong>Target expansion</strong>
+                    <select class="qol-cp-target-select" aria-label="Target expansion slot">${buildTargetSlotOptions(lastScanResult)}</select>
+                    <span class="qol-cp-target-remaining">${formatNumber(Math.max(0, lastScanResult.target - lastScanResult.current))} CP remaining</span>
+                </div>
+                <div class="qol-cp-period-control">
+                    <strong>24/7 period</strong>
+                    <input type="number" class="qol-cp-period-input" min="0.25" max="365" step="0.25" value="1" aria-label="24/7 celebration planning period in days">
+                    <span>days</span>
+                    <span class="qol-cp-period-hint">Starts inside period count.</span>
+                </div>
             </div>
             <div class="qol-cp-planner-table-wrap">
                 <table class="qol-cp-planner-table">
@@ -1258,7 +1426,16 @@
                     <tbody>${rows}</tbody>
                 </table>
             </div>
-            <div class="qol-cp-plan-note">Every village with a selected Town Hall level plans <strong>one</strong> selected celebration. Leave <strong>24/7</strong> unticked to count that celebration once. Tick it to run the selected celebration continuously for the planning period above. For 24/7 rows, <strong>Extra CP / Period</strong> counts only celebration starts that actually occur before the selected period ends; existing scanned queues delay when the new plan can begin. Big Celebration becomes available at Town Hall level 10. Town Hall construction/upgrade time and resource costs are not included yet.</div>
+            <div class="qol-cp-roadmap">
+                <div class="qol-cp-roadmap-head"><span>CP Roadmap</span><span>Next 5 expansion slots from Slot ${nextSlot}</span></div>
+                <div class="qol-cp-roadmap-wrap">
+                    <table class="qol-cp-roadmap-table">
+                        <thead><tr><th>Slot</th><th>Target CP</th><th>Remaining</th><th>ETA</th></tr></thead>
+                        <tbody class="qol-cp-roadmap-body"></tbody>
+                    </table>
+                </div>
+            </div>
+            <div class="qol-cp-plan-note">Choose any future <strong>Target Expansion</strong> to recalculate Planner ETA. The roadmap uses the same Town Hall, celebration and 24/7-period settings. Every village with a selected Town Hall level plans <strong>one</strong> selected celebration. Leave <strong>24/7</strong> unticked to count that celebration once. Tick it to run the selected celebration continuously for the chosen period. For 24/7 rows, <strong>Extra CP / Period</strong> counts only celebration starts that occur before the period ends; existing scanned queues delay when the new plan can begin. Big Celebration becomes available at Town Hall level 10. Town Hall construction/upgrade time and resource costs are not included yet.</div>
         `;
 
         planner.querySelector('.qol-cp-speed').textContent = `Detected x${speedInfo.speed} · ${speedInfo.source}`;
@@ -1347,9 +1524,10 @@
             renderResult(result);
 
             const hallCount = townHalls.villages.filter(village => village.hasTownHall).length;
+            const nextSlot = getNextExpansionSlot(result);
             setStatus(
                 townHalls.complete
-                    ? `CP scan complete. ${hallCount} Town Hall${hallCount === 1 ? '' : 's'} detected. Ready to plan.`
+                    ? `CP scan complete. Next expansion is Slot ${nextSlot}. ${hallCount} Town Hall${hallCount === 1 ? '' : 's'} detected. Ready to plan.`
                     : `CP scan complete, but village scan may be incomplete (${townHalls.scannedCount} scanned).`,
                 townHalls.complete ? 'success' : 'error'
             );
@@ -1398,7 +1576,7 @@
         panel.innerHTML = `
             <div class="qol-cp-header"><span>CP Manager</span><span class="qol-cp-close" title="Close">&times;</span></div>
             <div class="qol-cp-body">
-                <div class="qol-cp-description">Scan CP progress, daily production, Town Halls and celebrations. After scanning, use <strong>Plan CP</strong> to open the planner beside this window.</div>
+                <div class="qol-cp-description">Scan CP progress, daily production, Town Halls and celebrations. The scan identifies your next expansion slot; <strong>Plan CP</strong> can then project any future slot up to 50.</div>
                 <div class="qol-cp-controls">
                     <div class="qol-cp-action-btn qol-cp-scan-btn" role="button" tabindex="0">Scan CP</div>
                     <div class="qol-cp-action-btn secondary qol-cp-plan-btn hidden" role="button" tabindex="0">Plan CP</div>
@@ -1548,7 +1726,7 @@
                 <span class="qol-feature-icon">CP</span>
                 <div class="qol-feature-copy">
                     <h3 class="qol-feature-name">CP Manager</h3>
-                    <p class="qol-feature-desc">Tracks and plans CP, Town Halls and celebrations across your villages.</p>
+                    <p class="qol-feature-desc">Tracks and plans CP, expansion slots, Town Halls and celebrations across your villages.</p>
                 </div>
                 <label class="qol-switch">
                     <input type="checkbox" id="${MENU_CHECKBOX_ID}" class="qol-checkbox">
@@ -1627,5 +1805,5 @@
     }
 
     window.setInterval(ensureUI, 1200);
-    console.log('[APES CP Manager] Period-aware planner + scan lock initialized.');
+    console.log('[APES CP Manager] Expansion-slot planner + roadmap initialized.');
 })();

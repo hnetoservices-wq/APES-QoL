@@ -1,0 +1,66 @@
+{
+  "manifest_version": 3,
+  "name": "APES QoL",
+  "version": "1.3",
+  "description": "Quality of Life improvements for Travian Kingdoms.",
+  "permissions": [
+    "storage",
+    "unlimitedStorage"
+  ],
+  "content_scripts": [
+    {
+      "matches": [
+        "*://*.kingdoms.com/*"
+      ],
+      "js": [
+        "features/oasisNetworkBridge.js"
+      ],
+      "run_at": "document_start",
+      "world": "MAIN"
+    },
+    {
+      "matches": [
+        "*://*.kingdoms.com/*"
+      ],
+      "js": [
+        "features/mapKeys.js",
+        "features/navigationKeys.js",
+        "features/mapHover.js",
+        "features/menu.js",
+        "features/oasisScanner.js",
+        "features/rallyPointEnhancer.js",
+        "features/buildingQueueEnhanced.js",
+        "features/igmEnhancer.js",
+        "features/sendButtonsEnhancer.js",
+        "features/chatSilencer.js",
+        "features/incomingResources.js",
+        "features/watchlist.js",
+        "features/reportArchive.js",
+        "features/checklists.js",
+        "features/npcCalculator.js",
+        "features/auctionHouseScanner.js",
+        "features/cpManager.js",
+        "features/help.js",
+        "features/content.js"
+      ],
+      "css": [
+        "features/style.css"
+      ],
+      "run_at": "document_idle"
+    }
+  ],
+  "icons": {
+    "16": "features/icon16.png",
+    "32": "features/icon32.png",
+    "48": "features/icon48.png",
+    "128": "features/icon128.png"
+  },
+  "action": {
+    "default_icon": {
+      "16": "features/icon16.png",
+      "32": "features/icon32.png",
+      "48": "features/icon48.png",
+      "128": "features/icon128.png"
+    }
+  }
+}

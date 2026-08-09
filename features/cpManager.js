@@ -19,16 +19,21 @@
     const PANEL_ID = 'qol-cp-manager-panel';
     const STYLE_ID = 'qol-cp-manager-styles';
     const MENU_CHECKBOX_ID = 'qol-chk-cp-manager';
-    const MAX_VILLAGE_HOPS = 100;
     const BUILDING_LOCATION = 27;
+    const MAX_VILLAGE_HOPS = 100;
 
     let scanInProgress = false;
-    let toolbarPatchInstalled = false;
 
     function isEnabled() {
-        return typeof window.isQolEnabled === 'function'
-            ? window.isQolEnabled(FEATURE_KEY)
-            : localStorage.getItem(`qol_${FEATURE_KEY}`) !== 'false';
+        if (typeof window.isQolEnabled === 'function') {
+            return window.isQolEnabled(FEATURE_KEY) === true;
+        }
+
+        try {
+            return localStorage.getItem(`qol_${FEATURE_KEY}`) !== 'false';
+        } catch (error) {
+            return true;
+        }
     }
 
     function sleep(ms) {
@@ -42,7 +47,7 @@
 
     function formatNumber(value) {
         if (!Number.isFinite(value)) return '-';
-        return value.toLocaleString('en-US');
+        return Number(value).toLocaleString();
     }
 
     function escapeHtml(value) {
@@ -54,54 +59,19 @@
             .replace(/'/g, '&#039;');
     }
 
-    function getCurrentVillageName() {
-        const selectors = [
-            '.currentVillageName.dropdown .selectedItem .villageEntry',
-            '#villageList .currentVillageName .selectedItem .villageEntry',
-            '.currentVillageName .villageEntry'
-        ];
-
-        for (const selector of selectors) {
-            const element = document.querySelector(selector);
-            const text = element?.textContent?.trim();
-            if (text) return text;
-        }
-
-        return 'Current village';
-    }
-
-    function getVillageIdFromHash() {
-        const match = window.location.hash.match(/(?:^|\/)villId:([^/]+)/);
-        return match ? match[1] : null;
-    }
-
-    function getVillageIdentity() {
-        const id = getVillageIdFromHash();
-        const name = getCurrentVillageName();
-        return id ? `id:${id}` : `name:${name}`;
-    }
-
-    function setFeatureEnabled(enabled) {
-        try {
-            localStorage.setItem(`qol_${FEATURE_KEY}`, String(enabled));
-        } catch (error) {
-            console.warn('[APES CP Manager] Failed to save feature state.', error);
-        }
-
-        window.dispatchEvent(new CustomEvent('qol_setting_changed', {
-            detail: {
-                key: FEATURE_KEY,
-                enabled
-            }
-        }));
-    }
-
     function injectStyles() {
         if (document.getElementById(STYLE_ID)) return;
 
         const style = document.createElement('style');
         style.id = STYLE_ID;
+
         style.textContent = `
+            /*
+             * Toolbar button deliberately mirrors the same APES toolbar
+             * styling used by menu.js and the other feature modules.
+             * It is a DIV rather than a native game BUTTON so Travian does
+             * not attach its own button styling/behaviour to it.
+             */
             #${TOGGLE_ID} {
                 position: fixed !important;
                 width: 30px !important;
@@ -116,16 +86,13 @@
                 background-color: #ebdcb9 !important;
                 background-image: none !important;
                 box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2) !important;
-                color: #6b5234 !important;
                 cursor: pointer !important;
                 user-select: none !important;
                 box-sizing: border-box !important;
-                font-family: Arial, Helvetica, sans-serif !important;
-                font-size: 9px !important;
-                font-weight: 800 !important;
-                line-height: 1 !important;
-                letter-spacing: -0.3px !important;
-                transition: transform 0.2s ease, background-color 0.2s ease !important;
+                transition:
+                    transform 0.2s ease,
+                    background-color 0.2s ease,
+                    opacity 0.2s ease !important;
                 z-index: 9999 !important;
             }
 
@@ -138,9 +105,22 @@
                 transform: scale(1) !important;
             }
 
+            #${TOGGLE_ID} svg {
+                width: 18px !important;
+                height: 18px !important;
+                fill: none !important;
+                stroke: #7d6342 !important;
+                stroke-width: 2 !important;
+                stroke-linecap: round !important;
+                stroke-linejoin: round !important;
+                display: block !important;
+                pointer-events: none !important;
+            }
+
             #${TOGGLE_ID}.qol-cp-scanning {
+                opacity: 0.55 !important;
                 cursor: wait !important;
-                opacity: 0.72 !important;
+                pointer-events: none !important;
             }
 
             body.qol-menu-open #${TOGGLE_ID} {
@@ -158,169 +138,180 @@
 
             #${PANEL_ID} {
                 position: fixed !important;
-                top: 50% !important;
-                left: 50% !important;
-                width: min(390px, 92vw) !important;
+                display: none;
+                flex-direction: column !important;
+                width: 430px !important;
+                max-width: 94vw !important;
+                min-height: 220px !important;
                 margin: 0 !important;
                 padding: 0 !important;
-                transform: translate(-50%, -50%) !important;
                 border: 3px solid #634d31 !important;
-                border-radius: 7px !important;
-                background: #f7f5f0 !important;
-                color: #332719 !important;
-                box-shadow: 0 18px 48px rgba(0, 0, 0, 0.48) !important;
+                border-radius: 4px !important;
+                background-color: #f7f5f0 !important;
+                color: #333333 !important;
+                box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5) !important;
                 overflow: hidden !important;
-                z-index: 1000001 !important;
+                z-index: 999999 !important;
             }
 
             #${PANEL_ID} .qol-cp-header {
+                height: 34px !important;
+                padding: 6px 10px !important;
                 display: flex !important;
                 align-items: center !important;
                 justify-content: space-between !important;
-                min-height: 48px !important;
-                padding: 9px 11px 9px 13px !important;
-                border-bottom: 1px solid #3f2d19 !important;
-                background: linear-gradient(to bottom, #6d5436, #4f3b24) !important;
-                color: #fffaf0 !important;
-            }
-
-            #${PANEL_ID} .qol-cp-title {
-                display: flex !important;
-                flex-direction: column !important;
-                gap: 1px !important;
-            }
-
-            #${PANEL_ID} .qol-cp-title strong {
-                color: #fffaf0 !important;
-                font-size: 13px !important;
-                line-height: 17px !important;
-            }
-
-            #${PANEL_ID} .qol-cp-title span {
-                color: #d7c8ad !important;
-                font-size: 9px !important;
-                line-height: 13px !important;
+                background: linear-gradient(to bottom, #6d5436, #543f26) !important;
+                color: #f7f5f0 !important;
+                font-size: 14px !important;
+                font-weight: bold !important;
+                user-select: none !important;
             }
 
             #${PANEL_ID} .qol-cp-close {
-                display: inline-flex !important;
-                align-items: center !important;
-                justify-content: center !important;
-                width: 28px !important;
-                height: 28px !important;
-                margin: 0 !important;
-                padding: 0 !important;
-                border: 0 !important;
-                border-radius: 5px !important;
-                background: rgba(0, 0, 0, 0.2) !important;
+                cursor: pointer !important;
                 color: #ffffff !important;
                 font-size: 21px !important;
-                font-weight: 700 !important;
+                font-weight: bold !important;
                 line-height: 1 !important;
-                cursor: pointer !important;
+                padding: 0 5px !important;
+                border-radius: 3px !important;
+                background-color: rgba(0, 0, 0, 0.2) !important;
+                user-select: none !important;
             }
 
             #${PANEL_ID} .qol-cp-close:hover {
-                background: rgba(255, 255, 255, 0.15) !important;
+                background-color: rgba(255, 255, 255, 0.16) !important;
             }
 
             #${PANEL_ID} .qol-cp-body {
-                padding: 14px !important;
-                background: #f7f5f0 !important;
+                display: flex !important;
+                flex-direction: column !important;
+                gap: 8px !important;
+                padding: 10px !important;
+                background-color: #f7f5f0 !important;
             }
 
             #${PANEL_ID} .qol-cp-status {
-                margin: 0 !important;
-                padding: 10px 11px !important;
-                border: 1px solid #d6cab8 !important;
-                border-radius: 5px !important;
-                background: #ffffff !important;
-                color: #665744 !important;
-                font-size: 10px !important;
-                line-height: 1.45 !important;
+                padding: 7px 9px !important;
+                background-color: #fff6e5 !important;
+                border: 1px solid #d4c2a5 !important;
+                border-radius: 4px !important;
+                color: #5b4630 !important;
+                font-size: 11px !important;
+                line-height: 1.4 !important;
             }
 
-            #${PANEL_ID} .qol-cp-result {
+            #${PANEL_ID} .qol-cp-status.qol-cp-error {
+                background-color: #fff3ef !important;
+                border-color: #c99b89 !important;
+                color: #a52a2a !important;
+                font-weight: bold !important;
+            }
+
+            #${PANEL_ID} .qol-cp-result-grid {
                 display: grid !important;
-                grid-template-columns: 1fr 1fr !important;
-                gap: 8px !important;
-                margin-top: 10px !important;
+                grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+                gap: 6px !important;
             }
 
-            #${PANEL_ID} .qol-cp-stat {
-                padding: 9px 10px !important;
-                border: 1px solid #d6cab8 !important;
-                border-radius: 5px !important;
-                background: #ffffff !important;
+            #${PANEL_ID} .qol-cp-card {
+                min-width: 0 !important;
+                padding: 8px 10px !important;
+                background-color: #ffffff !important;
+                border: 1px solid #c7b99e !important;
+                border-radius: 3px !important;
             }
 
-            #${PANEL_ID} .qol-cp-stat-label {
+            #${PANEL_ID} .qol-cp-card-label {
                 display: block !important;
-                margin-bottom: 3px !important;
-                color: #7a6a55 !important;
-                font-size: 8.5px !important;
-                font-weight: 700 !important;
-                line-height: 12px !important;
-                letter-spacing: 0.35px !important;
+                margin-bottom: 4px !important;
+                color: #6a573d !important;
+                font-size: 10px !important;
+                font-weight: bold !important;
                 text-transform: uppercase !important;
+                letter-spacing: 0.3px !important;
             }
 
-            #${PANEL_ID} .qol-cp-stat-value {
+            #${PANEL_ID} .qol-cp-card-value {
                 display: block !important;
                 color: #3f3020 !important;
                 font-size: 15px !important;
-                font-weight: 800 !important;
-                line-height: 19px !important;
+                font-weight: bold !important;
             }
 
-            #${PANEL_ID} .qol-cp-progress-wrap {
-                margin-top: 10px !important;
-                padding: 10px !important;
-                border: 1px solid #d6cab8 !important;
-                border-radius: 5px !important;
-                background: #ffffff !important;
+            #${PANEL_ID} .qol-cp-progress-box {
+                padding: 8px 10px !important;
+                background-color: #ffffff !important;
+                border: 1px solid #c7b99e !important;
+                border-radius: 3px !important;
             }
 
             #${PANEL_ID} .qol-cp-progress-head {
                 display: flex !important;
+                align-items: center !important;
                 justify-content: space-between !important;
-                gap: 8px !important;
+                gap: 10px !important;
                 margin-bottom: 6px !important;
-                color: #5e4a33 !important;
-                font-size: 9px !important;
-                font-weight: 700 !important;
+                color: #5b4630 !important;
+                font-size: 10px !important;
+                font-weight: bold !important;
             }
 
             #${PANEL_ID} .qol-cp-progress-track {
+                width: 100% !important;
                 height: 10px !important;
-                border: 1px solid #b9a589 !important;
-                border-radius: 8px !important;
-                background: #eee8dc !important;
+                border: 1px solid #bda57e !important;
+                border-radius: 6px !important;
+                background-color: #e9dfcc !important;
                 overflow: hidden !important;
             }
 
             #${PANEL_ID} .qol-cp-progress-bar {
                 height: 100% !important;
-                width: 0;
-                background: linear-gradient(to bottom, #7ea743, #5f8733) !important;
-                transition: width 0.25s ease !important;
+                background: linear-gradient(to bottom, #7da544, #5c8038) !important;
             }
 
             #${PANEL_ID} .qol-cp-meta {
-                margin-top: 9px !important;
-                color: #7a6a55 !important;
-                font-size: 9px !important;
-                line-height: 1.45 !important;
-            }
-
-            #${PANEL_ID} .qol-cp-error {
-                border-color: #c79a86 !important;
-                background: #fff8f2 !important;
-                color: #8f3f2f !important;
+                padding: 7px 9px !important;
+                background-color: #ffffff !important;
+                border: 1px solid #c7b99e !important;
+                border-radius: 3px !important;
+                color: #6c5a43 !important;
+                font-size: 10px !important;
+                line-height: 1.4 !important;
             }
         `;
 
         document.head.appendChild(style);
+    }
+
+    function getCurrentVillageName() {
+        const selectors = [
+            '.currentVillageName.dropdown .selectedItem .villageEntry',
+            '#villageList .currentVillageName .selectedItem .villageEntry',
+            '.currentVillageName .villageEntry',
+            '.villageEntry.active',
+            '.active .villageEntry'
+        ];
+
+        for (const selector of selectors) {
+            const element = document.querySelector(selector);
+            const text = element?.textContent?.replace(/[\r\n]+/g, ' ').trim();
+
+            if (text) return text;
+        }
+
+        return 'Current village';
+    }
+
+    function getVillageIdFromHash() {
+        const match = (window.location.hash || '').match(/(?:^|\/)villId:([^/]+)/);
+        return match ? match[1] : null;
+    }
+
+    function getVillageIdentity() {
+        const id = getVillageIdFromHash();
+        return id ? `id:${id}` : `name:${getCurrentVillageName()}`;
     }
 
     function createPanel() {
@@ -329,32 +320,61 @@
 
         panel = document.createElement('div');
         panel.id = PANEL_ID;
-        panel.style.display = 'none';
+
         panel.innerHTML = `
             <div class="qol-cp-header">
-                <div class="qol-cp-title">
-                    <strong>CP Manager</strong>
-                    <span>City founding culture point progress</span>
-                </div>
-                <button type="button" class="qol-cp-close" aria-label="Close CP Manager">&times;</button>
+                <span>CP Manager</span>
+                <span class="qol-cp-close" title="Close">&times;</span>
             </div>
+
             <div class="qol-cp-body">
-                <div class="qol-cp-status">Ready to scan.</div>
+                <div class="qol-cp-status">
+                    Select the CP toolbar button to scan your culture point progress.
+                </div>
+
                 <div class="qol-cp-output"></div>
             </div>
         `;
 
-        panel.querySelector('.qol-cp-close').addEventListener('click', () => {
-            panel.style.display = 'none';
+        panel.querySelector('.qol-cp-close').addEventListener('click', event => {
+            event.preventDefault();
+            event.stopPropagation();
+            panel.style.setProperty('display', 'none', 'important');
         });
 
         document.body.appendChild(panel);
         return panel;
     }
 
+    function positionPanelUnderButton(panel) {
+        const toggleButton = document.getElementById(TOGGLE_ID);
+
+        if (!toggleButton) {
+            panel.style.setProperty('left', '20px', 'important');
+            panel.style.setProperty('top', '80px', 'important');
+            return;
+        }
+
+        const buttonRect = toggleButton.getBoundingClientRect();
+        const panelWidth = panel.offsetWidth || 430;
+        const panelHeight = panel.offsetHeight || 260;
+
+        const maximumLeft = Math.max(10, window.innerWidth - panelWidth - 10);
+        const maximumTop = Math.max(10, window.innerHeight - panelHeight - 10);
+
+        const left = Math.max(10, Math.min(buttonRect.left, maximumLeft));
+        const top = Math.max(10, Math.min(buttonRect.bottom + 20, maximumTop));
+
+        panel.style.setProperty('left', `${left}px`, 'important');
+        panel.style.setProperty('top', `${top}px`, 'important');
+        panel.style.setProperty('right', 'auto', 'important');
+        panel.style.setProperty('bottom', 'auto', 'important');
+    }
+
     function showPanel() {
         const panel = createPanel();
-        panel.style.display = 'block';
+        positionPanelUnderButton(panel);
+        panel.style.setProperty('display', 'flex', 'important');
         return panel;
     }
 
@@ -377,41 +397,51 @@
         const output = panel.querySelector('.qol-cp-output');
 
         const progress = result.target > 0
-            ? Math.min(100, Math.max(0, (result.current / result.target) * 100))
+            ? Math.max(0, Math.min(100, (result.current / result.target) * 100))
             : 0;
+
         const remaining = Math.max(0, result.target - result.current);
 
         status.classList.remove('qol-cp-error');
         status.textContent = 'Culture point progress found.';
 
         output.innerHTML = `
-            <div class="qol-cp-result">
-                <div class="qol-cp-stat">
-                    <span class="qol-cp-stat-label">Current CP</span>
-                    <span class="qol-cp-stat-value">${formatNumber(result.current)}</span>
+            <div class="qol-cp-result-grid">
+                <div class="qol-cp-card">
+                    <span class="qol-cp-card-label">Current CP</span>
+                    <span class="qol-cp-card-value">${formatNumber(result.current)}</span>
                 </div>
-                <div class="qol-cp-stat">
-                    <span class="qol-cp-stat-label">Target CP</span>
-                    <span class="qol-cp-stat-value">${formatNumber(result.target)}</span>
+
+                <div class="qol-cp-card">
+                    <span class="qol-cp-card-label">Target CP</span>
+                    <span class="qol-cp-card-value">${formatNumber(result.target)}</span>
                 </div>
-                <div class="qol-cp-stat">
-                    <span class="qol-cp-stat-label">Remaining</span>
-                    <span class="qol-cp-stat-value">${formatNumber(remaining)}</span>
+
+                <div class="qol-cp-card">
+                    <span class="qol-cp-card-label">Remaining</span>
+                    <span class="qol-cp-card-value">${formatNumber(remaining)}</span>
                 </div>
-                <div class="qol-cp-stat">
-                    <span class="qol-cp-stat-label">Progress</span>
-                    <span class="qol-cp-stat-value">${progress.toFixed(1)}%</span>
+
+                <div class="qol-cp-card">
+                    <span class="qol-cp-card-label">Progress</span>
+                    <span class="qol-cp-card-value">${progress.toFixed(1)}%</span>
                 </div>
             </div>
-            <div class="qol-cp-progress-wrap">
+
+            <div class="qol-cp-progress-box">
                 <div class="qol-cp-progress-head">
                     <span>${formatNumber(result.current)} / ${formatNumber(result.target)}</span>
                     <span>${progress.toFixed(1)}%</span>
                 </div>
+
                 <div class="qol-cp-progress-track">
-                    <div class="qol-cp-progress-bar" style="width:${progress.toFixed(2)}%"></div>
+                    <div
+                        class="qol-cp-progress-bar"
+                        style="width:${progress.toFixed(2)}% !important;"
+                    ></div>
                 </div>
             </div>
+
             <div class="qol-cp-meta">
                 Read from <strong>${escapeHtml(result.villageName)}</strong>${
                     result.skippedCities > 0
@@ -422,29 +452,73 @@
         `;
     }
 
-    function createToolbarButton() {
-        let button = document.getElementById(TOGGLE_ID);
-        if (button) return button;
+    function mountToggleButton() {
+        let toggleButton = document.getElementById(TOGGLE_ID);
+        if (toggleButton) return toggleButton;
 
-        button = document.createElement('button');
-        button.type = 'button';
-        button.id = TOGGLE_ID;
-        button.title = 'CP Manager';
-        button.setAttribute('aria-label', 'Open CP Manager');
-        button.textContent = 'CP';
+        toggleButton = document.createElement('div');
+        toggleButton.id = TOGGLE_ID;
+        toggleButton.setAttribute('title', 'CP Manager');
+        toggleButton.setAttribute('role', 'button');
+        toggleButton.setAttribute('tabindex', '0');
+        toggleButton.setAttribute('aria-label', 'Open CP Manager');
 
-        button.addEventListener('click', () => {
+        toggleButton.innerHTML = `
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M4 19V5"></path>
+                <path d="M4 19h16"></path>
+                <path d="M7 15l3-4 3 2 4-6"></path>
+                <path d="M16 7h3v3"></path>
+            </svg>
+        `;
+
+        toggleButton.addEventListener('click', event => {
+            event.preventDefault();
+            event.stopPropagation();
+
             if (!scanInProgress) {
                 scanCulturePoints();
             }
         });
 
-        document.body.appendChild(button);
-        return button;
+        toggleButton.addEventListener('keydown', event => {
+            if (event.key !== 'Enter' && event.key !== ' ') return;
+
+            event.preventDefault();
+            event.stopPropagation();
+
+            if (!scanInProgress) {
+                scanCulturePoints();
+            }
+        });
+
+        document.body.appendChild(toggleButton);
+        return toggleButton;
     }
 
-    function getToolbarAnchorButtons() {
-        const ids = [
+    function positionToggleButton() {
+        const toggleButton = document.getElementById(TOGGLE_ID) || mountToggleButton();
+
+        if (!isEnabled()) {
+            toggleButton.style.setProperty('display', 'none', 'important');
+            return;
+        }
+
+        const villageList = document.getElementById('villageList');
+
+        if (!villageList) {
+            toggleButton.style.setProperty('display', 'none', 'important');
+            return;
+        }
+
+        const villageRect = villageList.getBoundingClientRect();
+
+        if (villageRect.width <= 0 || villageRect.height <= 0) {
+            toggleButton.style.setProperty('display', 'none', 'important');
+            return;
+        }
+
+        const toolbarIds = [
             'qol-cog-btn',
             'qol-help-toggle-btn',
             'qol-ir-toggle-btn',
@@ -455,61 +529,49 @@
             'qol-oasis-toggle-btn'
         ];
 
-        return ids
+        const visibleButtons = toolbarIds
             .map(id => document.getElementById(id))
             .filter(Boolean)
             .filter(element => {
-                const style = window.getComputedStyle(element);
+                const computed = window.getComputedStyle(element);
                 const rect = element.getBoundingClientRect();
-                return style.display !== 'none' && rect.width > 0 && rect.height > 0;
+
+                return computed.display !== 'none' &&
+                    computed.visibility !== 'hidden' &&
+                    rect.width > 0 &&
+                    rect.height > 0;
             });
-    }
 
-    function repositionToolbarButton() {
-        const button = createToolbarButton();
-
-        if (!isEnabled()) {
-            button.style.setProperty('display', 'none', 'important');
-            return;
-        }
-
-        const villageList = document.getElementById('villageList');
-        if (!villageList) {
-            button.style.setProperty('display', 'none', 'important');
-            return;
-        }
-
-        const villageRect = villageList.getBoundingClientRect();
-        if (villageRect.width <= 0 || villageRect.height <= 0) {
-            button.style.setProperty('display', 'none', 'important');
-            return;
-        }
-
-        const anchors = getToolbarAnchorButtons();
         let left = villageRect.right + 20;
 
-        if (anchors.length) {
-            left = Math.max(...anchors.map(element => element.getBoundingClientRect().right)) + 6;
+        if (visibleButtons.length > 0) {
+            left = Math.max(
+                ...visibleButtons.map(element => element.getBoundingClientRect().right)
+            ) + 6;
         }
 
-        button.style.setProperty('left', `${left}px`, 'important');
-        button.style.setProperty('top', `${villageRect.top + 4}px`, 'important');
-        button.style.setProperty('display', 'flex', 'important');
+        toggleButton.style.setProperty('position', 'fixed', 'important');
+        toggleButton.style.setProperty('left', `${left}px`, 'important');
+        toggleButton.style.setProperty('top', `${villageRect.top + 4}px`, 'important');
+        toggleButton.style.setProperty('width', '30px', 'important');
+        toggleButton.style.setProperty('height', '30px', 'important');
+        toggleButton.style.setProperty('display', 'flex', 'important');
+        toggleButton.style.setProperty('z-index', '9999', 'important');
     }
 
-    function patchToolbarRepositioner() {
-        if (toolbarPatchInstalled) return;
+    function setFeatureEnabled(enabled) {
+        try {
+            localStorage.setItem(`qol_${FEATURE_KEY}`, String(enabled));
+        } catch (error) {
+            console.warn('[APES CP Manager] Failed to save feature state.', error);
+        }
 
-        const original = window.qolRepositionAllButtons;
-        if (typeof original !== 'function') return;
-
-        window.qolRepositionAllButtons = function patchedQolRepositionAllButtons(...args) {
-            const result = original.apply(this, args);
-            requestAnimationFrame(repositionToolbarButton);
-            return result;
-        };
-
-        toolbarPatchInstalled = true;
+        window.dispatchEvent(new CustomEvent('qol_setting_changed', {
+            detail: {
+                key: FEATURE_KEY,
+                enabled
+            }
+        }));
     }
 
     function ensureSettingsCard() {
@@ -524,16 +586,25 @@
 
             const card = document.createElement('article');
             card.className = 'qol-feature-card';
+
             card.innerHTML = `
                 <span class="qol-feature-icon" aria-hidden="true">CP</span>
+
                 <div class="qol-feature-copy">
                     <h3 class="qol-feature-name">CP Manager</h3>
+
                     <p class="qol-feature-desc">
                         Opens City founding and reads your current culture point progress toward the next city.
                     </p>
                 </div>
+
                 <label class="qol-switch" title="Toggle CP Manager">
-                    <input type="checkbox" id="${MENU_CHECKBOX_ID}" class="qol-checkbox">
+                    <input
+                        type="checkbox"
+                        id="${MENU_CHECKBOX_ID}"
+                        class="qol-checkbox"
+                    >
+
                     <span class="qol-switch-track" aria-hidden="true"></span>
                     <span class="qol-visually-hidden">Toggle CP Manager</span>
                 </label>
@@ -542,16 +613,18 @@
             grid.appendChild(card);
             checkbox = card.querySelector(`#${MENU_CHECKBOX_ID}`);
 
-            const coreSection = grid.previousElementSibling;
-            const count = coreSection?.querySelector('.qol-section-count');
-            if (count) {
-                const toolCount = grid.querySelectorAll('.qol-feature-card').length;
-                count.textContent = `${toolCount} tools`;
+            const sectionHeading = grid.previousElementSibling;
+            const countElement = sectionHeading?.querySelector('.qol-section-count');
+
+            if (countElement) {
+                const count = grid.querySelectorAll('.qol-feature-card').length;
+                countElement.textContent = `${count} tools`;
             }
         }
 
         if (!checkbox.dataset.qolCpBound) {
             checkbox.dataset.qolCpBound = 'true';
+
             checkbox.addEventListener('change', event => {
                 setFeatureEnabled(Boolean(event.target.checked));
             });
@@ -561,9 +634,8 @@
     }
 
     function findTownBox() {
-        return Array.from(document.querySelectorAll('.foundTown.contentBox')).find(box => {
-            return /city founding/i.test(box.textContent || '');
-        }) || null;
+        return Array.from(document.querySelectorAll('.foundTown.contentBox'))
+            .find(box => /city founding/i.test(box.textContent || '')) || null;
     }
 
     function readTownState() {
@@ -579,19 +651,20 @@
             const currentElement = cultureCell.querySelector('.currentValue');
             const current = parseInteger(currentElement?.textContent);
 
-            const values = Array.from(cultureCell.querySelectorAll('span'))
+            const targetCandidates = Array.from(cultureCell.querySelectorAll('span'))
                 .filter(element => !element.classList.contains('currentValue'))
                 .map(element => parseInteger(element.textContent))
                 .filter(Number.isFinite);
 
-            const target = values.length ? values[values.length - 1] : null;
+            const target = targetCandidates.length > 0
+                ? targetCandidates[targetCandidates.length - 1]
+                : null;
 
             if (Number.isFinite(current) && Number.isFinite(target)) {
                 return {
                     type: 'village',
                     current,
-                    target,
-                    box
+                    target
                 };
             }
         }
@@ -603,8 +676,7 @@
 
         if (cityMarker) {
             return {
-                type: 'city',
-                box
+                type: 'city'
             };
         }
 
@@ -612,26 +684,28 @@
     }
 
     function openCityFoundingWindow() {
-        const hash = window.location.hash || '';
-        const villageIdMatch = hash.match(/(?:^|\/)villId:([^/]+)/);
-        const parts = ['page:village'];
+        const currentHash = window.location.hash || '';
+        const villageIdMatch = currentHash.match(/(?:^|\/)villId:([^/]+)/);
+        const route = ['page:village'];
 
         if (villageIdMatch) {
-            parts.push(`villId:${villageIdMatch[1]}`);
+            route.push(`villId:${villageIdMatch[1]}`);
         }
 
-        parts.push(`location:${BUILDING_LOCATION}`, 'window:building');
-        const nextHash = `#/${parts.join('/')}`;
+        route.push(`location:${BUILDING_LOCATION}`);
+        route.push('window:building');
 
-        if (window.location.hash !== nextHash) {
-            window.location.hash = nextHash;
+        const targetHash = `#/${route.join('/')}`;
+
+        if (window.location.hash !== targetHash) {
+            window.location.hash = targetHash;
         }
     }
 
-    async function waitForTownState(timeoutMs = 6000) {
-        const start = performance.now();
+    async function waitForTownState(timeoutMs = 7000) {
+        const startedAt = performance.now();
 
-        while (performance.now() - start < timeoutMs) {
+        while (performance.now() - startedAt < timeoutMs) {
             const state = readTownState();
             if (state) return state;
             await sleep(100);
@@ -655,57 +729,58 @@
         return null;
     }
 
-    function triggerVillageChange(direction) {
-        if (typeof window.changeVillage === 'function') {
-            window.changeVillage(direction);
-            return true;
-        }
-
-        if (typeof changeVillage === 'function') {
-            changeVillage(direction);
-            return true;
-        }
-
+    function clickVillageNavigation(direction) {
         const button = findVillageNavigationButton(direction);
         if (!button) return false;
 
         button.dispatchEvent(new MouseEvent('click', {
             view: window,
             bubbles: true,
-            cancelable: true
+            cancelable: true,
+            composed: true,
+            button: 0
         }));
 
         return true;
     }
 
     async function waitForVillageChange(previousIdentity, timeoutMs = 5000) {
-        const start = performance.now();
+        const startedAt = performance.now();
 
-        while (performance.now() - start < timeoutMs) {
+        while (performance.now() - startedAt < timeoutMs) {
             await sleep(100);
+
             const identity = getVillageIdentity();
-            if (identity !== previousIdentity) return identity;
+            if (identity !== previousIdentity) return true;
         }
 
-        return null;
+        return false;
     }
 
     async function moveVillage(direction) {
-        const before = getVillageIdentity();
-        const triggered = triggerVillageChange(direction);
-        if (!triggered) return false;
+        const previousIdentity = getVillageIdentity();
 
-        const changed = await waitForVillageChange(before);
-        if (!changed) return false;
+        if (!clickVillageNavigation(direction)) {
+            return false;
+        }
 
-        await sleep(150);
+        const changed = await waitForVillageChange(previousIdentity);
+
+        if (!changed) {
+            return false;
+        }
+
+        await sleep(200);
         return true;
     }
 
     async function restoreStartingVillage(hops) {
         for (let index = 0; index < hops; index += 1) {
             const moved = await moveVillage('previous');
-            if (!moved) return false;
+
+            if (!moved) {
+                return false;
+            }
         }
 
         return true;
@@ -715,34 +790,48 @@
         if (scanInProgress || !isEnabled()) return;
 
         scanInProgress = true;
-        const button = createToolbarButton();
+
+        const toggleButton = document.getElementById(TOGGLE_ID) || mountToggleButton();
         const originalHash = window.location.hash;
         let hops = 0;
 
-        button.classList.add('qol-cp-scanning');
+        toggleButton.classList.add('qol-cp-scanning');
+
+        window.dispatchEvent(new CustomEvent('qol_close_others', {
+            detail: {
+                source: 'cpManager'
+            }
+        }));
+
         setPanelStatus('Opening City founding and reading culture points...');
 
         try {
             openCityFoundingWindow();
-            await sleep(200);
+            await sleep(250);
 
-            const firstIdentity = getVillageIdentity();
+            const startingIdentity = getVillageIdentity();
             const visited = new Set();
 
             for (let attempt = 0; attempt < MAX_VILLAGE_HOPS; attempt += 1) {
                 const identity = getVillageIdentity();
 
                 if (visited.has(identity)) {
-                    throw new Error('Every available village appears to be a city. No village CP requirement could be read.');
+                    throw new Error(
+                        'Every available village appears to be a city. No village CP requirement could be read.'
+                    );
                 }
 
                 visited.add(identity);
+
                 openCityFoundingWindow();
-                await sleep(200);
+                await sleep(250);
 
                 const state = await waitForTownState();
+
                 if (!state) {
-                    throw new Error('The City founding section could not be found in Main Building location 27.');
+                    throw new Error(
+                        'The City founding section could not be found in Main Building location 27.'
+                    );
                 }
 
                 if (state.type === 'village') {
@@ -767,17 +856,22 @@
                     return;
                 }
 
-                setPanelStatus(`City detected in ${getCurrentVillageName()}. Checking the next village...`);
+                setPanelStatus(
+                    `City detected in ${getCurrentVillageName()}. Checking the next village...`
+                );
 
                 const moved = await moveVillage('next');
+
                 if (!moved) {
                     throw new Error('The next-village control could not be used.');
                 }
 
                 hops += 1;
 
-                if (getVillageIdentity() === firstIdentity) {
-                    throw new Error('Every available village appears to be a city. No village CP requirement could be read.');
+                if (getVillageIdentity() === startingIdentity) {
+                    throw new Error(
+                        'Every available village appears to be a city. No village CP requirement could be read.'
+                    );
                 }
             }
 
@@ -789,7 +883,10 @@
                 try {
                     await restoreStartingVillage(hops);
                 } catch (restoreError) {
-                    console.warn('[APES CP Manager] Could not restore the starting village.', restoreError);
+                    console.warn(
+                        '[APES CP Manager] Could not restore the starting village.',
+                        restoreError
+                    );
                 }
             }
 
@@ -797,70 +894,91 @@
                 window.location.hash = originalHash;
             }
 
-            setPanelStatus(error?.message || 'Could not read culture point progress.', true);
+            setPanelStatus(
+                error?.message || 'Could not read culture point progress.',
+                true
+            );
         } finally {
             scanInProgress = false;
-            button.classList.remove('qol-cp-scanning');
-            requestAnimationFrame(repositionToolbarButton);
+            toggleButton.classList.remove('qol-cp-scanning');
+            requestAnimationFrame(positionToggleButton);
         }
     }
 
-    function syncFeatureState() {
-        const button = createToolbarButton();
+    function destroyUI() {
+        const toggleButton = document.getElementById(TOGGLE_ID);
+        const panel = document.getElementById(PANEL_ID);
+
+        if (toggleButton) toggleButton.remove();
+        if (panel) panel.remove();
+
+        scanInProgress = false;
+    }
+
+    function ensureUI() {
+        if (!document.body) return;
 
         if (!isEnabled()) {
-            button.style.setProperty('display', 'none', 'important');
-            const panel = document.getElementById(PANEL_ID);
-            if (panel) panel.style.display = 'none';
-        } else {
-            repositionToolbarButton();
+            destroyUI();
+            ensureSettingsCard();
+            return;
         }
 
-        ensureSettingsCard();
-    }
-
-    function initialise() {
         injectStyles();
-        createToolbarButton();
         createPanel();
+        mountToggleButton();
         ensureSettingsCard();
-        patchToolbarRepositioner();
-        syncFeatureState();
 
-        window.addEventListener('qol_setting_changed', event => {
-            if (event.detail?.key === FEATURE_KEY) {
-                syncFeatureState();
-            }
-        });
+        if (typeof window.qolRepositionAllButtons === 'function') {
+            window.qolRepositionAllButtons();
+        }
 
-        window.addEventListener('resize', repositionToolbarButton);
-        window.addEventListener('hashchange', () => {
-            requestAnimationFrame(repositionToolbarButton);
-        });
-
-        const observer = new MutationObserver(() => {
-            ensureSettingsCard();
-            patchToolbarRepositioner();
-            repositionToolbarButton();
-        });
-
-        observer.observe(document.documentElement, {
-            childList: true,
-            subtree: true
-        });
-
-        setInterval(() => {
-            patchToolbarRepositioner();
-            ensureSettingsCard();
-            repositionToolbarButton();
-        }, 1500);
-
-        console.log('[APES CP Manager] Initialized.');
+        requestAnimationFrame(positionToggleButton);
     }
+
+    window.addEventListener('qol_setting_changed', event => {
+        if (event.detail?.key === FEATURE_KEY) {
+            ensureUI();
+        }
+    });
+
+    window.addEventListener('qol_close_others', event => {
+        if (event.detail?.source === 'cpManager') return;
+
+        const panel = document.getElementById(PANEL_ID);
+
+        if (panel) {
+            panel.style.setProperty('display', 'none', 'important');
+        }
+    });
+
+    window.addEventListener('resize', () => {
+        requestAnimationFrame(positionToggleButton);
+    });
+
+    window.addEventListener('hashchange', () => {
+        requestAnimationFrame(positionToggleButton);
+    });
+
+    document.addEventListener('keydown', event => {
+        if (event.key !== 'Escape') return;
+
+        const panel = document.getElementById(PANEL_ID);
+
+        if (panel && window.getComputedStyle(panel).display !== 'none') {
+            panel.style.setProperty('display', 'none', 'important');
+        }
+    }, true);
 
     if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', initialise, { once: true });
+        document.addEventListener('DOMContentLoaded', ensureUI, {
+            once: true
+        });
     } else {
-        initialise();
+        ensureUI();
     }
+
+    window.setInterval(ensureUI, 1200);
+
+    console.log('[APES CP Manager] Module initialized.');
 })();

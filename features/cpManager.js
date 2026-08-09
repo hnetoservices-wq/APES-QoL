@@ -10,6 +10,7 @@
  * - Plan toward any expansion slot up to slot 50.
  * - Show a five-slot CP roadmap using the active celebration plan.
  * - Simulate 24/7 celebrations for a user-defined planning period.
+ * - Plan Artwork usage as instant CP events, limited to one per day.
  * - Lock the game screen while automated CP scanning is running.
  */
 (function initCpManagerModule() {
@@ -29,6 +30,7 @@
     const DAY_MS = 86400000;
     const SMALL_CELEBRATION_CAP = 500;
     const BIG_CELEBRATION_CAP = 2000;
+    const ARTWORK_CAP = 2000;
 
     // Fixed Culture Point thresholds for expansion slots 1-50.
     // Source: Travian Kingdoms Help Center - Culture points.
@@ -308,7 +310,7 @@
             #${PANEL_ID},#${PANEL_ID} *,#${PLANNER_ID},#${PLANNER_ID} *{box-sizing:border-box!important;font-family:Arial,Helvetica,sans-serif!important;text-shadow:none!important}
             #${PANEL_ID},#${PLANNER_ID}{position:fixed!important;display:none;flex-direction:column!important;border:3px solid #634d31!important;border-radius:4px!important;background:#f7f5f0!important;color:#333!important;box-shadow:0 10px 30px rgba(0,0,0,.5)!important;overflow:hidden!important;z-index:999999!important}
             #${PANEL_ID}{width:560px!important;max-width:94vw!important;max-height:86vh!important}
-            #${PLANNER_ID}{width:720px!important;max-width:94vw!important;max-height:86vh!important;z-index:1000000!important}
+            #${PLANNER_ID}{width:760px!important;max-width:94vw!important;max-height:86vh!important;z-index:1000000!important}
 
             #${PANEL_ID} .qol-cp-header,#${PLANNER_ID} .qol-cp-planner-head{height:34px!important;padding:6px 10px!important;background:linear-gradient(to bottom,#6d5436,#543f26)!important;color:#f7f5f0!important;font-size:14px!important;font-weight:bold!important;display:flex!important;align-items:center!important;justify-content:space-between!important;flex:0 0 auto!important;cursor:move!important;user-select:none!important}
             #${PANEL_ID} .qol-cp-close,#${PLANNER_ID} .qol-cp-planner-close{cursor:pointer!important;color:#fff!important;font-size:21px!important;font-weight:bold!important;line-height:1!important;padding:0 5px!important;border-radius:3px!important;background:rgba(0,0,0,.2)!important}
@@ -352,18 +354,18 @@
             #${PLANNER_ID} .qol-cp-planner-title-wrap{display:flex!important;align-items:center!important;gap:8px!important;min-width:0!important}
             #${PLANNER_ID} .qol-cp-speed{font-size:10px!important;font-weight:normal!important;opacity:.9!important;white-space:nowrap!important}
             #${PLANNER_ID} .qol-cp-planner-body{display:flex!important;flex-direction:column!important;min-height:0!important;background:#fbf7ef!important;overflow:hidden!important}
-            #${PLANNER_ID} .qol-cp-planner-summary{display:grid!important;grid-template-columns:repeat(4,minmax(0,1fr))!important;gap:6px!important;padding:8px!important;border-bottom:1px solid #d6c8ae!important;flex:0 0 auto!important}
+            #${PLANNER_ID} .qol-cp-planner-summary{display:grid!important;grid-template-columns:repeat(5,minmax(0,1fr))!important;gap:6px!important;padding:8px!important;border-bottom:1px solid #d6c8ae!important;flex:0 0 auto!important}
             #${PLANNER_ID} .qol-cp-plan-stat{padding:6px 8px!important;background:#fff!important;border:1px solid #d3c4aa!important;border-radius:3px!important;min-width:0!important}
             #${PLANNER_ID} .qol-cp-plan-stat span{display:block!important;color:#77654d!important;font-size:8px!important;font-weight:bold!important;text-transform:uppercase!important}
             #${PLANNER_ID} .qol-cp-plan-stat strong{display:block!important;margin-top:2px!important;color:#3f3020!important;font-size:13px!important;overflow:hidden!important;text-overflow:ellipsis!important}
-            #${PLANNER_ID} .qol-cp-planner-controls{display:grid!important;grid-template-columns:minmax(0,1.15fr) minmax(0,.85fr)!important;gap:6px!important;padding:7px 8px!important;background:#f4eee2!important;border-bottom:1px solid #d6c8ae!important;flex:0 0 auto!important}
-            #${PLANNER_ID} .qol-cp-target-control,#${PLANNER_ID} .qol-cp-period-control{display:flex!important;align-items:center!important;gap:7px!important;min-width:0!important;padding:6px 7px!important;background:#fffaf0!important;border:1px solid #d6c8ae!important;border-radius:3px!important;color:#5b4630!important;font-size:10px!important}
-            #${PLANNER_ID} .qol-cp-target-control strong,#${PLANNER_ID} .qol-cp-period-control strong{font-size:9px!important;color:#4f3b24!important;text-transform:uppercase!important;white-space:nowrap!important}
+            #${PLANNER_ID} .qol-cp-planner-controls{display:grid!important;grid-template-columns:minmax(0,1.25fr) minmax(0,.72fr) minmax(0,.8fr)!important;gap:6px!important;padding:7px 8px!important;background:#f4eee2!important;border-bottom:1px solid #d6c8ae!important;flex:0 0 auto!important}
+            #${PLANNER_ID} .qol-cp-target-control,#${PLANNER_ID} .qol-cp-period-control,#${PLANNER_ID} .qol-cp-artwork-control{display:flex!important;align-items:center!important;gap:7px!important;min-width:0!important;padding:6px 7px!important;background:#fffaf0!important;border:1px solid #d6c8ae!important;border-radius:3px!important;color:#5b4630!important;font-size:10px!important}
+            #${PLANNER_ID} .qol-cp-target-control strong,#${PLANNER_ID} .qol-cp-period-control strong,#${PLANNER_ID} .qol-cp-artwork-control strong{font-size:9px!important;color:#4f3b24!important;text-transform:uppercase!important;white-space:nowrap!important}
             #${PLANNER_ID} .qol-cp-target-select{appearance:auto!important;-webkit-appearance:auto!important;min-width:190px!important;max-width:250px!important;height:26px!important;padding:2px 5px!important;border:1px solid #a99473!important;border-radius:3px!important;background:#fff!important;color:#493821!important;font-size:10px!important}
             #${PLANNER_ID} .qol-cp-target-remaining{margin-left:auto!important;color:#7d6342!important;font-size:9px!important;font-weight:bold!important;white-space:nowrap!important}
-            #${PLANNER_ID} .qol-cp-period-input{appearance:auto!important;-webkit-appearance:auto!important;width:65px!important;height:25px!important;padding:2px 5px!important;border:1px solid #a99473!important;border-radius:3px!important;background:#fff!important;color:#493821!important;font-size:11px!important;text-align:center!important}
-            #${PLANNER_ID} .qol-cp-period-hint{color:#84735d!important;font-size:9px!important;overflow:hidden!important;text-overflow:ellipsis!important;white-space:nowrap!important}
-            #${PLANNER_ID} .qol-cp-planner-table-wrap{overflow:auto!important;max-height:34vh!important;background:#fff!important}
+            #${PLANNER_ID} .qol-cp-period-input,#${PLANNER_ID} .qol-cp-artwork-input{appearance:auto!important;-webkit-appearance:auto!important;width:62px!important;height:25px!important;padding:2px 5px!important;border:1px solid #a99473!important;border-radius:3px!important;background:#fff!important;color:#493821!important;font-size:11px!important;text-align:center!important}
+            #${PLANNER_ID} .qol-cp-period-hint,#${PLANNER_ID} .qol-cp-artwork-hint{color:#84735d!important;font-size:9px!important;overflow:hidden!important;text-overflow:ellipsis!important;white-space:nowrap!important}
+            #${PLANNER_ID} .qol-cp-planner-table-wrap{overflow:auto!important;max-height:32vh!important;background:#fff!important}
             #${PLANNER_ID} .qol-cp-planner-table th:nth-child(1),#${PLANNER_ID} .qol-cp-planner-table td:nth-child(1){width:24%!important}
             #${PLANNER_ID} .qol-cp-planner-table th:nth-child(2),#${PLANNER_ID} .qol-cp-planner-table td:nth-child(2){width:14%!important;text-align:center!important}
             #${PLANNER_ID} .qol-cp-planner-table th:nth-child(3),#${PLANNER_ID} .qol-cp-planner-table td:nth-child(3){width:17%!important;text-align:center!important}
@@ -451,8 +453,8 @@
         if (!force && planner.dataset.userPositioned === 'true') return;
 
         const mainRect = main.getBoundingClientRect();
-        const plannerWidth = planner.offsetWidth || 720;
-        const plannerHeight = planner.offsetHeight || 520;
+        const plannerWidth = planner.offsetWidth || 760;
+        const plannerHeight = planner.offsetHeight || 540;
         const preferredLeft = mainRect.right + 10;
         let left = preferredLeft;
 
@@ -1106,6 +1108,32 @@
         return Math.min(BIG_CELEBRATION_CAP, result.cpPerDay || 0);
     }
 
+    function getArtworkReward(result) {
+        const passiveCpPerDay = Number(result?.cpPerDay || 0);
+        return Math.min(ARTWORK_CAP, Math.max(0, passiveCpPerDay));
+    }
+
+    function getPlannerArtworkCount() {
+        const input = document.querySelector(`#${PLANNER_ID} .qol-cp-artwork-input`);
+        const value = Number.parseInt(input?.value || '0', 10);
+        if (!Number.isFinite(value) || value <= 0) return 0;
+        return Math.min(365, Math.max(0, value));
+    }
+
+    function buildArtworkEvents(result, artworkCount, now = Date.now()) {
+        const reward = getArtworkReward(result);
+        const count = Math.max(0, Math.floor(Number(artworkCount) || 0));
+        if (reward <= 0 || count <= 0) return [];
+
+        return Array.from({ length: count }, (_, index) => ({
+            startMs: now + (index * DAY_MS),
+            reward,
+            villageName: 'Artwork',
+            type: 'artwork',
+            source: 'artwork'
+        }));
+    }
+
     function getPlannerPeriodDays() {
         const input = document.querySelector(`#${PLANNER_ID} .qol-cp-period-input`);
         const value = Number.parseFloat(input?.value || '1');
@@ -1168,7 +1196,7 @@
         });
     }
 
-    function buildPlannerPrediction(result, plans, periodDays, targetCp = result.target) {
+    function buildPlannerPrediction(result, plans, periodDays, targetCp = result.target, artworkCount = 0) {
         const effectiveTarget = Number.isFinite(targetCp) ? targetCp : result.target;
         const now = Date.now();
         const planEndMs = now + (periodDays * DAY_MS);
@@ -1181,10 +1209,12 @@
 
         if (estimatedCurrent >= effectiveTarget) return formatPredictionResult(now, []);
 
-        const fixedEvents = result.townHalls.celebrationEvents
-            .filter(event => event.startMs > now)
-            .map(event => ({ ...event, source: 'queued' }))
-            .sort((a, b) => a.startMs - b.startMs);
+        const fixedEvents = [
+            ...result.townHalls.celebrationEvents
+                .filter(event => event.startMs > now)
+                .map(event => ({ ...event, source: 'queued' })),
+            ...buildArtworkEvents(result, artworkCount, now)
+        ].sort((a, b) => a.startMs - b.startMs);
 
         const sequences = plans
             .filter(plan => plan.level > 0 && plan.durationSeconds > 0 && plan.reward > 0)
@@ -1233,7 +1263,7 @@
             applied.push(next);
             if (cp >= effectiveTarget) return formatPredictionResult(next.startMs, applied);
 
-            if (next.source === 'queued') {
+            if (next.source === 'queued' || next.source === 'artwork') {
                 fixed.shift();
             } else if (sequence) {
                 if (sequence.run247) {
@@ -1252,7 +1282,7 @@
         return { text: 'Planner ETA exceeded calculation range', targetDate: null, exactMinutes: null };
     }
 
-    function updateRoadmap(planner, plans, periodDays, selectedSlot) {
+    function updateRoadmap(planner, plans, periodDays, selectedSlot, artworkCount) {
         const body = planner.querySelector('.qol-cp-roadmap-body');
         if (!body || !lastScanResult) return;
 
@@ -1263,7 +1293,7 @@
         for (let slot = startSlot; slot <= endSlot; slot += 1) {
             const target = getSlotTarget(slot);
             const remaining = Math.max(0, target - lastScanResult.current);
-            const prediction = buildPlannerPrediction(lastScanResult, plans, periodDays, target);
+            const prediction = buildPlannerPrediction(lastScanResult, plans, periodDays, target, artworkCount);
             const eta = target <= lastScanResult.current
                 ? 'Unlocked'
                 : prediction.targetDate
@@ -1290,6 +1320,9 @@
 
         const speedInfo = detectServerSpeed(lastScanResult);
         const periodDays = getPlannerPeriodDays();
+        const artworkCount = getPlannerArtworkCount();
+        const artworkReward = getArtworkReward(lastScanResult);
+        const artworkCp = artworkReward * artworkCount;
         const targetSlot = getPlannerTargetSlot() || getNextExpansionSlot(lastScanResult);
         const targetCp = getSlotTarget(targetSlot) ?? lastScanResult.target;
         const now = Date.now();
@@ -1340,18 +1373,23 @@
         });
 
         const plans = readPlannerPlans();
-        const prediction = buildPlannerPrediction(lastScanResult, plans, periodDays, targetCp);
+        const prediction = buildPlannerPrediction(lastScanResult, plans, periodDays, targetCp, artworkCount);
         const remainingToTarget = Math.max(0, targetCp - lastScanResult.current);
 
         planner.querySelector('.qol-cp-plan-base').textContent = formatNumber(lastScanResult.cpPerDay);
         planner.querySelector('.qol-cp-plan-celebrations').textContent = formatNumber(total247CpPeriod);
         planner.querySelector('.qol-cp-plan-oneoff').textContent = formatNumber(oneOffCelebrationCp);
+        planner.querySelector('.qol-cp-plan-artworks').textContent = formatNumber(artworkCp);
+        planner.querySelector('.qol-cp-plan-artworks').title = artworkCount > 0
+            ? `${artworkCount} Artwork${artworkCount === 1 ? '' : 's'} × ${formatNumber(artworkReward)} CP each`
+            : `${formatNumber(artworkReward)} CP per Artwork`;
         planner.querySelector('.qol-cp-plan-eta').textContent = prediction.text;
         planner.querySelector('.qol-cp-plan-eta').title = prediction.text;
         planner.querySelector('.qol-cp-target-remaining').textContent = `${formatNumber(remainingToTarget)} CP remaining`;
+        planner.querySelector('.qol-cp-artwork-hint').textContent = `${formatNumber(artworkReward)} CP each · 1/day`;
         planner.querySelector('.qol-cp-speed').textContent = `Detected x${speedInfo.speed} · ${speedInfo.source}`;
 
-        updateRoadmap(planner, plans, periodDays, targetSlot);
+        updateRoadmap(planner, plans, periodDays, targetSlot, artworkCount);
     }
 
     function buildLevelOptions(village) {
@@ -1376,6 +1414,7 @@
         const planner = mountPlannerPanel();
         const speedInfo = detectServerSpeed(lastScanResult);
         const nextSlot = getNextExpansionSlot(lastScanResult);
+        const artworkReward = getArtworkReward(lastScanResult);
 
         const rows = lastScanResult.townHalls.villages.map((village, index) => {
             const startLevel = village.hasTownHall ? Math.max(1, village.level) : 0;
@@ -1405,6 +1444,7 @@
                 <div class="qol-cp-plan-stat"><span>Base CP / Day</span><strong class="qol-cp-plan-base">-</strong></div>
                 <div class="qol-cp-plan-stat"><span>24/7 CP / Period</span><strong class="qol-cp-plan-celebrations">-</strong></div>
                 <div class="qol-cp-plan-stat"><span>One-off Celebration CP</span><strong class="qol-cp-plan-oneoff">-</strong></div>
+                <div class="qol-cp-plan-stat"><span>Artwork CP</span><strong class="qol-cp-plan-artworks">0</strong></div>
                 <div class="qol-cp-plan-stat"><span>Planner ETA</span><strong class="qol-cp-plan-eta" style="font-size:10px!important">-</strong></div>
             </div>
             <div class="qol-cp-planner-controls">
@@ -1418,6 +1458,11 @@
                     <input type="number" class="qol-cp-period-input" min="0.25" max="365" step="0.25" value="1" aria-label="24/7 celebration planning period in days">
                     <span>days</span>
                     <span class="qol-cp-period-hint">Starts inside period count.</span>
+                </div>
+                <div class="qol-cp-artwork-control">
+                    <strong>Artworks</strong>
+                    <input type="number" class="qol-cp-artwork-input" min="0" max="365" step="1" value="0" aria-label="Number of Artworks to use">
+                    <span class="qol-cp-artwork-hint">${formatNumber(artworkReward)} CP each · 1/day</span>
                 </div>
             </div>
             <div class="qol-cp-planner-table-wrap">
@@ -1435,12 +1480,13 @@
                     </table>
                 </div>
             </div>
-            <div class="qol-cp-plan-note">Choose any future <strong>Target Expansion</strong> to recalculate Planner ETA. The roadmap uses the same Town Hall, celebration and 24/7-period settings. Every village with a selected Town Hall level plans <strong>one</strong> selected celebration. Leave <strong>24/7</strong> unticked to count that celebration once. Tick it to run the selected celebration continuously for the chosen period. For 24/7 rows, <strong>Extra CP / Period</strong> counts only celebration starts that occur before the period ends; existing scanned queues delay when the new plan can begin. Big Celebration becomes available at Town Hall level 10. Town Hall construction/upgrade time and resource costs are not included yet.</div>
+            <div class="qol-cp-plan-note">Choose any future <strong>Target Expansion</strong> to recalculate Planner ETA. The roadmap uses the same Town Hall, celebration, 24/7-period and Artwork settings. Every village with a selected Town Hall level plans <strong>one</strong> selected celebration. Leave <strong>24/7</strong> unticked to count that celebration once. Tick it to run the selected celebration continuously for the chosen period. For 24/7 rows, <strong>Extra CP / Period</strong> counts only celebration starts that occur before the period ends; existing scanned queues delay when the new plan can begin. <strong>Artworks</strong> use passive account CP/day up to 2,000 CP each; the planner applies the first immediately and any additional Artworks one day apart. Big Celebration becomes available at Town Hall level 10. Town Hall construction/upgrade time and resource costs are not included yet.</div>
         `;
 
         planner.querySelector('.qol-cp-speed').textContent = `Detected x${speedInfo.speed} · ${speedInfo.source}`;
         planner.querySelectorAll('select,input').forEach(control => control.addEventListener('change', updatePlanner));
         planner.querySelector('.qol-cp-period-input')?.addEventListener('input', updatePlanner);
+        planner.querySelector('.qol-cp-artwork-input')?.addEventListener('input', updatePlanner);
         planner.style.setProperty('display', 'flex', 'important');
         planner.dataset.userPositioned = 'false';
         requestAnimationFrame(() => {
@@ -1576,7 +1622,7 @@
         panel.innerHTML = `
             <div class="qol-cp-header"><span>CP Manager</span><span class="qol-cp-close" title="Close">&times;</span></div>
             <div class="qol-cp-body">
-                <div class="qol-cp-description">Scan CP progress, daily production, Town Halls and celebrations. The scan identifies your next expansion slot; <strong>Plan CP</strong> can then project any future slot up to 50.</div>
+                <div class="qol-cp-description">Scan CP progress, daily production, Town Halls and celebrations. The scan identifies your next expansion slot; <strong>Plan CP</strong> can then project future slots using celebrations and planned Artworks.</div>
                 <div class="qol-cp-controls">
                     <div class="qol-cp-action-btn qol-cp-scan-btn" role="button" tabindex="0">Scan CP</div>
                     <div class="qol-cp-action-btn secondary qol-cp-plan-btn hidden" role="button" tabindex="0">Plan CP</div>
@@ -1726,7 +1772,7 @@
                 <span class="qol-feature-icon">CP</span>
                 <div class="qol-feature-copy">
                     <h3 class="qol-feature-name">CP Manager</h3>
-                    <p class="qol-feature-desc">Tracks and plans CP, expansion slots, Town Halls and celebrations across your villages.</p>
+                    <p class="qol-feature-desc">Tracks and plans CP, expansion slots, Town Halls, celebrations and Artworks across your account.</p>
                 </div>
                 <label class="qol-switch">
                     <input type="checkbox" id="${MENU_CHECKBOX_ID}" class="qol-checkbox">
@@ -1805,5 +1851,5 @@
     }
 
     window.setInterval(ensureUI, 1200);
-    console.log('[APES CP Manager] Expansion-slot planner + roadmap initialized.');
+    console.log('[APES CP Manager] Expansion-slot planner + Artwork planning initialized.');
 })();

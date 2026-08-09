@@ -2,38 +2,33 @@
  * APES QoL Extension
  * Module: Culture Point Manager
  *
- * First version:
- * - Opens Main Building location 27 for the active village.
- * - Reads the City founding Culture Points requirement.
- * - If the active village is already a city, moves to the next village until
- *   a normal village is found.
- * - Returns to the village that was active before the scan.
- * - Displays current CP, target CP, progress and remaining CP.
+ * - Opens as a normal APES toolbar panel.
+ * - Scanning only starts when the user presses "Scan CP".
+ * - Reads current/target CP from Main Building location 27.
+ * - Skips city villages until a normal village is found.
+ * - Opens Villages Overview -> Culture Points and reads total CP/day.
+ * - Celebrations are intentionally not included yet.
  */
 
 (function initCpManagerModule() {
     'use strict';
 
     const FEATURE_KEY = 'cpManager';
-    const TOGGLE_ID = 'qol-cp-toggle-btn';
     const PANEL_ID = 'qol-cp-manager-panel';
+    const TOGGLE_ID = 'qol-cp-toggle-btn';
     const STYLE_ID = 'qol-cp-manager-styles';
     const MENU_CHECKBOX_ID = 'qol-chk-cp-manager';
     const BUILDING_LOCATION = 27;
     const MAX_VILLAGE_HOPS = 100;
 
-    let scanInProgress = false;
+    let isScanning = false;
 
     function isEnabled() {
         if (typeof window.isQolEnabled === 'function') {
             return window.isQolEnabled(FEATURE_KEY) === true;
         }
 
-        try {
-            return localStorage.getItem(`qol_${FEATURE_KEY}`) !== 'false';
-        } catch (error) {
-            return true;
-        }
+        return localStorage.getItem(`qol_${FEATURE_KEY}`) !== 'false';
     }
 
     function sleep(ms) {
@@ -46,8 +41,9 @@
     }
 
     function formatNumber(value) {
-        if (!Number.isFinite(value)) return '-';
-        return Number(value).toLocaleString();
+        return Number.isFinite(value)
+            ? Number(value).toLocaleString('en-US')
+            : '-';
     }
 
     function escapeHtml(value) {
@@ -60,49 +56,37 @@
     }
 
     function injectStyles() {
-        if (document.getElementById(STYLE_ID)) return;
+        if (document.getElementById(STYLE_ID)) {
+            return;
+        }
 
         const style = document.createElement('style');
         style.id = STYLE_ID;
 
         style.textContent = `
-            /*
-             * Toolbar button deliberately mirrors the same APES toolbar
-             * styling used by menu.js and the other feature modules.
-             * It is a DIV rather than a native game BUTTON so Travian does
-             * not attach its own button styling/behaviour to it.
-             */
             #${TOGGLE_ID} {
                 position: fixed !important;
                 width: 30px !important;
                 height: 30px !important;
+                background-color: #ebdcb9 !important;
+                border: 2px solid #7d6342 !important;
+                border-radius: 50% !important;
                 display: none;
                 align-items: center !important;
                 justify-content: center !important;
-                margin: 0 !important;
-                padding: 0 !important;
-                border: 2px solid #7d6342 !important;
-                border-radius: 50% !important;
-                background-color: #ebdcb9 !important;
-                background-image: none !important;
-                box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2) !important;
                 cursor: pointer !important;
-                user-select: none !important;
-                box-sizing: border-box !important;
-                transition:
-                    transform 0.2s ease,
-                    background-color 0.2s ease,
-                    opacity 0.2s ease !important;
                 z-index: 9999 !important;
+                box-shadow: 0 2px 5px rgba(0, 0, 0, 0.25) !important;
+                transition: transform 0.3s ease, background-color 0.2s, filter 0.2s, opacity 0.2s !important;
+                box-sizing: border-box !important;
+                padding: 0 !important;
+                margin: 0 !important;
+                user-select: none !important;
             }
 
             #${TOGGLE_ID}:hover {
                 transform: scale(1.1) !important;
                 background-color: #f7f5f0 !important;
-            }
-
-            #${TOGGLE_ID}:active {
-                transform: scale(1) !important;
             }
 
             #${TOGGLE_ID} svg {
@@ -114,12 +98,6 @@
                 stroke-linecap: round !important;
                 stroke-linejoin: round !important;
                 display: block !important;
-                pointer-events: none !important;
-            }
-
-            #${TOGGLE_ID}.qol-cp-scanning {
-                opacity: 0.55 !important;
-                cursor: wait !important;
                 pointer-events: none !important;
             }
 
@@ -140,9 +118,9 @@
                 position: fixed !important;
                 display: none;
                 flex-direction: column !important;
-                width: 430px !important;
+                width: 450px !important;
                 max-width: 94vw !important;
-                min-height: 220px !important;
+                min-height: 250px !important;
                 margin: 0 !important;
                 padding: 0 !important;
                 border: 3px solid #634d31 !important;
@@ -157,13 +135,13 @@
             #${PANEL_ID} .qol-cp-header {
                 height: 34px !important;
                 padding: 6px 10px !important;
-                display: flex !important;
-                align-items: center !important;
-                justify-content: space-between !important;
                 background: linear-gradient(to bottom, #6d5436, #543f26) !important;
                 color: #f7f5f0 !important;
                 font-size: 14px !important;
                 font-weight: bold !important;
+                display: flex !important;
+                align-items: center !important;
+                justify-content: space-between !important;
                 user-select: none !important;
             }
 
@@ -186,12 +164,12 @@
             #${PANEL_ID} .qol-cp-body {
                 display: flex !important;
                 flex-direction: column !important;
-                gap: 8px !important;
+                gap: 9px !important;
                 padding: 10px !important;
                 background-color: #f7f5f0 !important;
             }
 
-            #${PANEL_ID} .qol-cp-status {
+            #${PANEL_ID} .qol-cp-description {
                 padding: 7px 9px !important;
                 background-color: #fff6e5 !important;
                 border: 1px solid #d4c2a5 !important;
@@ -201,17 +179,67 @@
                 line-height: 1.4 !important;
             }
 
-            #${PANEL_ID} .qol-cp-status.qol-cp-error {
-                background-color: #fff3ef !important;
-                border-color: #c99b89 !important;
+            #${PANEL_ID} .qol-cp-controls {
+                display: flex !important;
+                align-items: center !important;
+                gap: 7px !important;
+            }
+
+            #${PANEL_ID} .qol-cp-action-btn {
+                min-width: 120px !important;
+                height: 28px !important;
+                padding: 5px 11px !important;
+                border: 1px solid #523d24 !important;
+                border-radius: 3px !important;
+                background: linear-gradient(to bottom, #7d6342, #543f26) !important;
+                color: #ffffff !important;
+                font-size: 11px !important;
+                font-weight: bold !important;
+                white-space: nowrap !important;
+                cursor: pointer !important;
+                user-select: none !important;
+                display: inline-flex !important;
+                align-items: center !important;
+                justify-content: center !important;
+            }
+
+            #${PANEL_ID} .qol-cp-action-btn:not(.disabled):hover {
+                filter: brightness(1.08) !important;
+            }
+
+            #${PANEL_ID} .qol-cp-action-btn.disabled {
+                opacity: 0.45 !important;
+                cursor: default !important;
+                pointer-events: none !important;
+            }
+
+            #${PANEL_ID} .qol-cp-status {
+                flex: 1 1 auto !important;
+                min-height: 18px !important;
+                color: #6c5a43 !important;
+                font-size: 10px !important;
+                line-height: 1.35 !important;
+            }
+
+            #${PANEL_ID} .qol-cp-status[data-tone="working"] {
+                color: #8a5a16 !important;
+                font-weight: bold !important;
+            }
+
+            #${PANEL_ID} .qol-cp-status[data-tone="success"] {
+                color: #4f7328 !important;
+                font-weight: bold !important;
+            }
+
+            #${PANEL_ID} .qol-cp-status[data-tone="error"] {
                 color: #a52a2a !important;
                 font-weight: bold !important;
             }
 
-            #${PANEL_ID} .qol-cp-result-grid {
-                display: grid !important;
+            #${PANEL_ID} .qol-cp-results {
+                display: none;
                 grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
-                gap: 6px !important;
+                gap: 7px !important;
             }
 
             #${PANEL_ID} .qol-cp-card {
@@ -222,11 +250,16 @@
                 border-radius: 3px !important;
             }
 
+            #${PANEL_ID} .qol-cp-card.highlight {
+                background-color: #fff6e5 !important;
+                border-color: #bda57e !important;
+            }
+
             #${PANEL_ID} .qol-cp-card-label {
                 display: block !important;
                 margin-bottom: 4px !important;
                 color: #6a573d !important;
-                font-size: 10px !important;
+                font-size: 9px !important;
                 font-weight: bold !important;
                 text-transform: uppercase !important;
                 letter-spacing: 0.3px !important;
@@ -235,11 +268,13 @@
             #${PANEL_ID} .qol-cp-card-value {
                 display: block !important;
                 color: #3f3020 !important;
-                font-size: 15px !important;
+                font-size: 16px !important;
                 font-weight: bold !important;
+                font-variant-numeric: tabular-nums !important;
             }
 
             #${PANEL_ID} .qol-cp-progress-box {
+                display: none;
                 padding: 8px 10px !important;
                 background-color: #ffffff !important;
                 border: 1px solid #c7b99e !important;
@@ -250,7 +285,7 @@
                 display: flex !important;
                 align-items: center !important;
                 justify-content: space-between !important;
-                gap: 10px !important;
+                gap: 8px !important;
                 margin-bottom: 6px !important;
                 color: #5b4630 !important;
                 font-size: 10px !important;
@@ -258,26 +293,24 @@
             }
 
             #${PANEL_ID} .qol-cp-progress-track {
-                width: 100% !important;
-                height: 10px !important;
-                border: 1px solid #bda57e !important;
-                border-radius: 6px !important;
-                background-color: #e9dfcc !important;
+                height: 9px !important;
+                border: 1px solid #b9a589 !important;
+                border-radius: 8px !important;
+                background-color: #eee8dc !important;
                 overflow: hidden !important;
             }
 
             #${PANEL_ID} .qol-cp-progress-bar {
                 height: 100% !important;
-                background: linear-gradient(to bottom, #7da544, #5c8038) !important;
+                width: 0;
+                background: linear-gradient(to bottom, #7ea743, #5f8733) !important;
             }
 
             #${PANEL_ID} .qol-cp-meta {
-                padding: 7px 9px !important;
-                background-color: #ffffff !important;
-                border: 1px solid #c7b99e !important;
-                border-radius: 3px !important;
-                color: #6c5a43 !important;
-                font-size: 10px !important;
+                display: none;
+                padding-top: 2px !important;
+                color: #7a6a55 !important;
+                font-size: 9px !important;
                 line-height: 1.4 !important;
             }
         `;
@@ -298,7 +331,9 @@
             const element = document.querySelector(selector);
             const text = element?.textContent?.replace(/[\r\n]+/g, ' ').trim();
 
-            if (text) return text;
+            if (text) {
+                return text;
+            }
         }
 
         return 'Current village';
@@ -314,38 +349,6 @@
         return id ? `id:${id}` : `name:${getCurrentVillageName()}`;
     }
 
-    function createPanel() {
-        let panel = document.getElementById(PANEL_ID);
-        if (panel) return panel;
-
-        panel = document.createElement('div');
-        panel.id = PANEL_ID;
-
-        panel.innerHTML = `
-            <div class="qol-cp-header">
-                <span>CP Manager</span>
-                <span class="qol-cp-close" title="Close">&times;</span>
-            </div>
-
-            <div class="qol-cp-body">
-                <div class="qol-cp-status">
-                    Select the CP toolbar button to scan your culture point progress.
-                </div>
-
-                <div class="qol-cp-output"></div>
-            </div>
-        `;
-
-        panel.querySelector('.qol-cp-close').addEventListener('click', event => {
-            event.preventDefault();
-            event.stopPropagation();
-            panel.style.setProperty('display', 'none', 'important');
-        });
-
-        document.body.appendChild(panel);
-        return panel;
-    }
-
     function positionPanelUnderButton(panel) {
         const toggleButton = document.getElementById(TOGGLE_ID);
 
@@ -356,8 +359,8 @@
         }
 
         const buttonRect = toggleButton.getBoundingClientRect();
-        const panelWidth = panel.offsetWidth || 430;
-        const panelHeight = panel.offsetHeight || 260;
+        const panelWidth = panel.offsetWidth || 450;
+        const panelHeight = panel.offsetHeight || 300;
 
         const maximumLeft = Math.max(10, window.innerWidth - panelWidth - 10);
         const maximumTop = Math.max(10, window.innerHeight - panelHeight - 10);
@@ -371,90 +374,212 @@
         panel.style.setProperty('bottom', 'auto', 'important');
     }
 
-    function showPanel() {
-        const panel = createPanel();
-        positionPanelUnderButton(panel);
-        panel.style.setProperty('display', 'flex', 'important');
-        return panel;
-    }
+    function setStatus(message, tone = 'neutral') {
+        const status = document.querySelector(`#${PANEL_ID} .qol-cp-status`);
 
-    function setPanelStatus(message, isError = false) {
-        const panel = showPanel();
-        const status = panel.querySelector('.qol-cp-status');
-        const output = panel.querySelector('.qol-cp-output');
+        if (!status) {
+            return;
+        }
 
         status.textContent = message;
-        status.classList.toggle('qol-cp-error', isError);
+        status.dataset.tone = tone;
+    }
 
-        if (isError && output) {
-            output.innerHTML = '';
+    function setScanButtonState(disabled, text) {
+        const button = document.querySelector(`#${PANEL_ID} .qol-cp-scan-btn`);
+
+        if (!button) {
+            return;
+        }
+
+        button.classList.toggle('disabled', disabled);
+        button.setAttribute('aria-disabled', disabled ? 'true' : 'false');
+
+        if (text) {
+            button.textContent = text;
         }
     }
 
     function renderResult(result) {
-        const panel = showPanel();
-        const status = panel.querySelector('.qol-cp-status');
-        const output = panel.querySelector('.qol-cp-output');
+        const panel = document.getElementById(PANEL_ID);
 
+        if (!panel) {
+            return;
+        }
+
+        const results = panel.querySelector('.qol-cp-results');
+        const progressBox = panel.querySelector('.qol-cp-progress-box');
+        const progressBar = panel.querySelector('.qol-cp-progress-bar');
+        const progressHead = panel.querySelector('.qol-cp-progress-head');
+        const meta = panel.querySelector('.qol-cp-meta');
+
+        const remaining = Math.max(0, result.target - result.current);
         const progress = result.target > 0
             ? Math.max(0, Math.min(100, (result.current / result.target) * 100))
             : 0;
 
-        const remaining = Math.max(0, result.target - result.current);
-
-        status.classList.remove('qol-cp-error');
-        status.textContent = 'Culture point progress found.';
-
-        output.innerHTML = `
-            <div class="qol-cp-result-grid">
-                <div class="qol-cp-card">
-                    <span class="qol-cp-card-label">Current CP</span>
-                    <span class="qol-cp-card-value">${formatNumber(result.current)}</span>
-                </div>
-
-                <div class="qol-cp-card">
-                    <span class="qol-cp-card-label">Target CP</span>
-                    <span class="qol-cp-card-value">${formatNumber(result.target)}</span>
-                </div>
-
-                <div class="qol-cp-card">
-                    <span class="qol-cp-card-label">Remaining</span>
-                    <span class="qol-cp-card-value">${formatNumber(remaining)}</span>
-                </div>
-
-                <div class="qol-cp-card">
-                    <span class="qol-cp-card-label">Progress</span>
-                    <span class="qol-cp-card-value">${progress.toFixed(1)}%</span>
-                </div>
+        results.innerHTML = `
+            <div class="qol-cp-card">
+                <span class="qol-cp-card-label">Current CP</span>
+                <span class="qol-cp-card-value">${formatNumber(result.current)}</span>
             </div>
 
-            <div class="qol-cp-progress-box">
-                <div class="qol-cp-progress-head">
-                    <span>${formatNumber(result.current)} / ${formatNumber(result.target)}</span>
-                    <span>${progress.toFixed(1)}%</span>
-                </div>
-
-                <div class="qol-cp-progress-track">
-                    <div
-                        class="qol-cp-progress-bar"
-                        style="width:${progress.toFixed(2)}% !important;"
-                    ></div>
-                </div>
+            <div class="qol-cp-card">
+                <span class="qol-cp-card-label">Target CP</span>
+                <span class="qol-cp-card-value">${formatNumber(result.target)}</span>
             </div>
 
-            <div class="qol-cp-meta">
-                Read from <strong>${escapeHtml(result.villageName)}</strong>${
-                    result.skippedCities > 0
-                        ? ` after skipping ${result.skippedCities} ${result.skippedCities === 1 ? 'city' : 'cities'}.`
-                        : '.'
-                }
+            <div class="qol-cp-card">
+                <span class="qol-cp-card-label">Remaining CP</span>
+                <span class="qol-cp-card-value">${formatNumber(remaining)}</span>
+            </div>
+
+            <div class="qol-cp-card highlight">
+                <span class="qol-cp-card-label">Total CP / Day</span>
+                <span class="qol-cp-card-value">${formatNumber(result.cpPerDay)}</span>
             </div>
         `;
+
+        results.style.setProperty('display', 'grid', 'important');
+
+        progressHead.innerHTML = `
+            <span>${formatNumber(result.current)} / ${formatNumber(result.target)}</span>
+            <span>${progress.toFixed(1)}%</span>
+        `;
+
+        progressBar.style.setProperty('width', `${progress.toFixed(2)}%`, 'important');
+        progressBox.style.setProperty('display', 'block', 'important');
+
+        meta.innerHTML = `
+            CP requirement read from <strong>${escapeHtml(result.villageName)}</strong>${
+                result.skippedCities > 0
+                    ? ` after skipping ${result.skippedCities} ${result.skippedCities === 1 ? 'city' : 'cities'}.`
+                    : '.'
+            }
+            Celebrations are not included in CP/day calculations yet.
+        `;
+
+        meta.style.setProperty('display', 'block', 'important');
+    }
+
+    function resetResults() {
+        const panel = document.getElementById(PANEL_ID);
+
+        if (!panel) {
+            return;
+        }
+
+        const results = panel.querySelector('.qol-cp-results');
+        const progressBox = panel.querySelector('.qol-cp-progress-box');
+        const meta = panel.querySelector('.qol-cp-meta');
+
+        results.innerHTML = '';
+        results.style.setProperty('display', 'none', 'important');
+        progressBox.style.setProperty('display', 'none', 'important');
+        meta.innerHTML = '';
+        meta.style.setProperty('display', 'none', 'important');
+    }
+
+    function mountPanel() {
+        let panel = document.getElementById(PANEL_ID);
+
+        if (panel) {
+            return panel;
+        }
+
+        panel = document.createElement('div');
+        panel.id = PANEL_ID;
+
+        panel.innerHTML = `
+            <div class="qol-cp-header">
+                <span>CP Manager</span>
+                <span class="qol-cp-close" title="Close">&times;</span>
+            </div>
+
+            <div class="qol-cp-body">
+                <div class="qol-cp-description">
+                    Scan your current culture points, next CP target and total culture point production per day.
+                </div>
+
+                <div class="qol-cp-controls">
+                    <div class="qol-cp-action-btn qol-cp-scan-btn" role="button" tabindex="0">
+                        Scan CP
+                    </div>
+
+                    <div class="qol-cp-status" data-tone="neutral">
+                        Ready to scan.
+                    </div>
+                </div>
+
+                <div class="qol-cp-results"></div>
+
+                <div class="qol-cp-progress-box">
+                    <div class="qol-cp-progress-head"></div>
+                    <div class="qol-cp-progress-track">
+                        <div class="qol-cp-progress-bar"></div>
+                    </div>
+                </div>
+
+                <div class="qol-cp-meta"></div>
+            </div>
+        `;
+
+        const closeButton = panel.querySelector('.qol-cp-close');
+        const scanButton = panel.querySelector('.qol-cp-scan-btn');
+
+        closeButton.addEventListener('click', event => {
+            event.preventDefault();
+            event.stopPropagation();
+            panel.style.setProperty('display', 'none', 'important');
+        });
+
+        const startScan = event => {
+            if (event) {
+                event.preventDefault();
+                event.stopPropagation();
+            }
+
+            if (!isScanning) {
+                scanCulturePoints();
+            }
+        };
+
+        scanButton.addEventListener('click', startScan);
+        scanButton.addEventListener('keydown', event => {
+            if (event.key === 'Enter' || event.key === ' ') {
+                startScan(event);
+            }
+        });
+
+        document.body.appendChild(panel);
+        return panel;
+    }
+
+    function togglePanel() {
+        const panel = mountPanel();
+        const hidden = window.getComputedStyle(panel).display === 'none';
+
+        if (!hidden) {
+            panel.style.setProperty('display', 'none', 'important');
+            return;
+        }
+
+        window.dispatchEvent(new CustomEvent('qol_close_others', {
+            detail: {
+                source: 'cpManager'
+            }
+        }));
+
+        positionPanelUnderButton(panel);
+        panel.style.setProperty('display', 'flex', 'important');
     }
 
     function mountToggleButton() {
         let toggleButton = document.getElementById(TOGGLE_ID);
-        if (toggleButton) return toggleButton;
+
+        if (toggleButton) {
+            return toggleButton;
+        }
 
         toggleButton = document.createElement('div');
         toggleButton.id = TOGGLE_ID;
@@ -472,41 +597,33 @@
             </svg>
         `;
 
-        toggleButton.addEventListener('click', event => {
+        const activate = event => {
             event.preventDefault();
             event.stopPropagation();
+            togglePanel();
+        };
 
-            if (!scanInProgress) {
-                scanCulturePoints();
-            }
-        });
-
+        toggleButton.addEventListener('click', activate);
         toggleButton.addEventListener('keydown', event => {
-            if (event.key !== 'Enter' && event.key !== ' ') return;
-
-            event.preventDefault();
-            event.stopPropagation();
-
-            if (!scanInProgress) {
-                scanCulturePoints();
+            if (event.key === 'Enter' || event.key === ' ') {
+                activate(event);
             }
         });
 
         document.body.appendChild(toggleButton);
+
+        if (typeof window.qolRepositionAllButtons === 'function') {
+            window.qolRepositionAllButtons();
+        }
+
         return toggleButton;
     }
 
     function positionToggleButton() {
         const toggleButton = document.getElementById(TOGGLE_ID) || mountToggleButton();
-
-        if (!isEnabled()) {
-            toggleButton.style.setProperty('display', 'none', 'important');
-            return;
-        }
-
         const villageList = document.getElementById('villageList');
 
-        if (!villageList) {
+        if (!isEnabled() || !villageList) {
             toggleButton.style.setProperty('display', 'none', 'important');
             return;
         }
@@ -518,7 +635,7 @@
             return;
         }
 
-        const toolbarIds = [
+        const precedingButtonIds = [
             'qol-cog-btn',
             'qol-help-toggle-btn',
             'qol-ir-toggle-btn',
@@ -526,32 +643,28 @@
             'qol-watchlist-toggle',
             'qol-checklist-toggle-btn',
             'qol-npc-calc-toggle-btn',
-            'qol-oasis-toggle-btn'
+            'qol-oasis-toggle-btn',
+            'qol-report-archive-toggle'
         ];
 
-        const visibleButtons = toolbarIds
-            .map(id => document.getElementById(id))
-            .filter(Boolean)
-            .filter(element => {
-                const computed = window.getComputedStyle(element);
-                const rect = element.getBoundingClientRect();
+        let nextLeft = villageRect.right + 20;
 
-                return computed.display !== 'none' &&
-                    computed.visibility !== 'hidden' &&
-                    rect.width > 0 &&
-                    rect.height > 0;
-            });
+        precedingButtonIds.forEach(id => {
+            const candidate = document.getElementById(id);
 
-        let left = villageRect.right + 20;
+            if (!candidate || window.getComputedStyle(candidate).display === 'none') {
+                return;
+            }
 
-        if (visibleButtons.length > 0) {
-            left = Math.max(
-                ...visibleButtons.map(element => element.getBoundingClientRect().right)
-            ) + 6;
-        }
+            const rect = candidate.getBoundingClientRect();
+
+            if (rect.width > 0 && rect.height > 0) {
+                nextLeft = Math.max(nextLeft, rect.right + 6);
+            }
+        });
 
         toggleButton.style.setProperty('position', 'fixed', 'important');
-        toggleButton.style.setProperty('left', `${left}px`, 'important');
+        toggleButton.style.setProperty('left', `${nextLeft}px`, 'important');
         toggleButton.style.setProperty('top', `${villageRect.top + 4}px`, 'important');
         toggleButton.style.setProperty('width', '30px', 'important');
         toggleButton.style.setProperty('height', '30px', 'important');
@@ -575,15 +688,15 @@
     }
 
     function ensureSettingsCard() {
-        const modal = document.getElementById('qol-modal');
-        if (!modal) return;
+        const featureGrid = document.querySelector('#qol-modal .qol-feature-grid');
 
-        let checkbox = modal.querySelector(`#${MENU_CHECKBOX_ID}`);
+        if (!featureGrid) {
+            return;
+        }
+
+        let checkbox = featureGrid.querySelector(`#${MENU_CHECKBOX_ID}`);
 
         if (!checkbox) {
-            const grid = modal.querySelector('.qol-feature-grid');
-            if (!grid) return;
-
             const card = document.createElement('article');
             card.className = 'qol-feature-card';
 
@@ -594,7 +707,7 @@
                     <h3 class="qol-feature-name">CP Manager</h3>
 
                     <p class="qol-feature-desc">
-                        Opens City founding and reads your current culture point progress toward the next city.
+                        Reads your city-founding CP progress and total culture point production per day.
                     </p>
                 </div>
 
@@ -610,19 +723,13 @@
                 </label>
             `;
 
-            grid.appendChild(card);
+            featureGrid.appendChild(card);
             checkbox = card.querySelector(`#${MENU_CHECKBOX_ID}`);
-
-            const sectionHeading = grid.previousElementSibling;
-            const countElement = sectionHeading?.querySelector('.qol-section-count');
-
-            if (countElement) {
-                const count = grid.querySelectorAll('.qol-feature-card').length;
-                countElement.textContent = `${count} tools`;
-            }
         }
 
-        if (!checkbox.dataset.qolCpBound) {
+        checkbox.checked = isEnabled();
+
+        if (checkbox.dataset.qolCpBound !== 'true') {
             checkbox.dataset.qolCpBound = 'true';
 
             checkbox.addEventListener('change', event => {
@@ -630,7 +737,15 @@
             });
         }
 
-        checkbox.checked = isEnabled();
+        const count = featureGrid.previousElementSibling?.querySelector('.qol-section-count');
+
+        if (count) {
+            const total = [...featureGrid.children].filter(child => {
+                return child.classList.contains('qol-feature-card');
+            }).length;
+
+            count.textContent = `${total} tools`;
+        }
     }
 
     function findTownBox() {
@@ -640,23 +755,30 @@
 
     function readTownState() {
         const box = findTownBox();
-        if (!box) return null;
+
+        if (!box) {
+            return null;
+        }
 
         const table = box.querySelector('.townConditionTable');
-        if (!table) return null;
+
+        if (!table) {
+            return null;
+        }
 
         const cultureCell = table.querySelector('td[ng-if="!village.isTown"]');
 
         if (cultureCell) {
-            const currentElement = cultureCell.querySelector('.currentValue');
-            const current = parseInteger(currentElement?.textContent);
+            const current = parseInteger(
+                cultureCell.querySelector('.currentValue')?.textContent
+            );
 
             const targetCandidates = Array.from(cultureCell.querySelectorAll('span'))
                 .filter(element => !element.classList.contains('currentValue'))
                 .map(element => parseInteger(element.textContent))
                 .filter(Number.isFinite);
 
-            const target = targetCandidates.length > 0
+            const target = targetCandidates.length
                 ? targetCandidates[targetCandidates.length - 1]
                 : null;
 
@@ -674,13 +796,9 @@
             Boolean(table.querySelector('td[ng-if="village.isTown"]')) ||
             Boolean(box.querySelector('.buildingDescription span[ng-if="village.isTown"]'));
 
-        if (cityMarker) {
-            return {
-                type: 'city'
-            };
-        }
-
-        return null;
+        return cityMarker
+            ? { type: 'city' }
+            : null;
     }
 
     function openCityFoundingWindow() {
@@ -695,11 +813,7 @@
         route.push(`location:${BUILDING_LOCATION}`);
         route.push('window:building');
 
-        const targetHash = `#/${route.join('/')}`;
-
-        if (window.location.hash !== targetHash) {
-            window.location.hash = targetHash;
-        }
+        window.location.hash = `#/${route.join('/')}`;
     }
 
     async function waitForTownState(timeoutMs = 7000) {
@@ -707,7 +821,11 @@
 
         while (performance.now() - startedAt < timeoutMs) {
             const state = readTownState();
-            if (state) return state;
+
+            if (state) {
+                return state;
+            }
+
             await sleep(100);
         }
 
@@ -723,7 +841,10 @@
 
         for (const selector of selectors) {
             const element = document.querySelector(selector);
-            if (element) return element;
+
+            if (element) {
+                return element;
+            }
         }
 
         return null;
@@ -731,7 +852,10 @@
 
     function clickVillageNavigation(direction) {
         const button = findVillageNavigationButton(direction);
-        if (!button) return false;
+
+        if (!button) {
+            return false;
+        }
 
         button.dispatchEvent(new MouseEvent('click', {
             view: window,
@@ -750,8 +874,9 @@
         while (performance.now() - startedAt < timeoutMs) {
             await sleep(100);
 
-            const identity = getVillageIdentity();
-            if (identity !== previousIdentity) return true;
+            if (getVillageIdentity() !== previousIdentity) {
+                return true;
+            }
         }
 
         return false;
@@ -764,9 +889,7 @@
             return false;
         }
 
-        const changed = await waitForVillageChange(previousIdentity);
-
-        if (!changed) {
+        if (!await waitForVillageChange(previousIdentity)) {
             return false;
         }
 
@@ -776,9 +899,7 @@
 
     async function restoreStartingVillage(hops) {
         for (let index = 0; index < hops; index += 1) {
-            const moved = await moveVillage('previous');
-
-            if (!moved) {
+            if (!await moveVillage('previous')) {
                 return false;
             }
         }
@@ -786,24 +907,107 @@
         return true;
     }
 
+    function openCulturePointsOverview() {
+        const currentHash = window.location.hash || '';
+        const villageIdMatch = currentHash.match(/(?:^|\/)villId:([^/]+)/);
+        const route = ['page:village'];
+
+        if (villageIdMatch) {
+            route.push(`villId:${villageIdMatch[1]}`);
+        }
+
+        route.push('window:villagesOverview');
+        route.push('tab:CulturePoints');
+
+        window.location.hash = `#/${route.join('/')}`;
+    }
+
+    function getCulturePointsTable() {
+        return (
+            document.querySelector(
+                '.loadedTab.tabCulturePoints.currentTab .cpOverview table.villagesTable'
+            ) ||
+            document.querySelector(
+                '.loadedTab.tabCulturePoints.activeTab .cpOverview table.villagesTable'
+            ) ||
+            document.querySelector(
+                '.tabContentCulturePoints .loadedTab.tabCulturePoints .cpOverview table.villagesTable'
+            ) ||
+            document.querySelector(
+                '.cpOverview table.villagesTable'
+            )
+        );
+    }
+
+    function readTotalCpPerDay() {
+        const table = getCulturePointsTable();
+
+        if (!table) {
+            return null;
+        }
+
+        const headers = Array.from(table.querySelectorAll('thead th'))
+            .map(header => header.textContent.replace(/\s+/g, ' ').trim());
+
+        let cpColumnIndex = headers.findIndex(text => /CPs?\s*\/\s*day/i.test(text));
+
+        if (cpColumnIndex < 0) {
+            cpColumnIndex = 1;
+        }
+
+        const footerCells = table.querySelectorAll('tfoot tr td');
+        const footerValue = parseInteger(footerCells[cpColumnIndex]?.textContent);
+
+        if (Number.isFinite(footerValue)) {
+            return footerValue;
+        }
+
+        let sum = 0;
+        let foundRows = 0;
+
+        table.querySelectorAll('tbody tr').forEach(row => {
+            const cells = row.querySelectorAll('td');
+            const value = parseInteger(cells[cpColumnIndex]?.textContent);
+
+            if (Number.isFinite(value)) {
+                sum += value;
+                foundRows += 1;
+            }
+        });
+
+        return foundRows > 0 ? sum : null;
+    }
+
+    async function waitForTotalCpPerDay(timeoutMs = 7000) {
+        const startedAt = performance.now();
+
+        while (performance.now() - startedAt < timeoutMs) {
+            const total = readTotalCpPerDay();
+
+            if (Number.isFinite(total)) {
+                return total;
+            }
+
+            await sleep(100);
+        }
+
+        return null;
+    }
+
     async function scanCulturePoints() {
-        if (scanInProgress || !isEnabled()) return;
+        if (isScanning || !isEnabled()) {
+            return;
+        }
 
-        scanInProgress = true;
+        isScanning = true;
 
-        const toggleButton = document.getElementById(TOGGLE_ID) || mountToggleButton();
         const originalHash = window.location.hash;
         let hops = 0;
+        let requirementResult = null;
 
-        toggleButton.classList.add('qol-cp-scanning');
-
-        window.dispatchEvent(new CustomEvent('qol_close_others', {
-            detail: {
-                source: 'cpManager'
-            }
-        }));
-
-        setPanelStatus('Opening City founding and reading culture points...');
+        resetResults();
+        setScanButtonState(true, 'Scanning...');
+        setStatus('Opening Main Building and reading city-founding CP...', 'working');
 
         try {
             openCityFoundingWindow();
@@ -822,9 +1026,8 @@
                 }
 
                 visited.add(identity);
-
                 openCityFoundingWindow();
-                await sleep(250);
+                await sleep(200);
 
                 const state = await waitForTownState();
 
@@ -835,34 +1038,22 @@
                 }
 
                 if (state.type === 'village') {
-                    const result = {
+                    requirementResult = {
                         current: state.current,
                         target: state.target,
                         villageName: getCurrentVillageName(),
                         skippedCities: hops
                     };
 
-                    if (hops > 0) {
-                        setPanelStatus('Culture points found. Returning to your starting village...');
-                        await restoreStartingVillage(hops);
-                    }
-
-                    if (window.location.hash !== originalHash) {
-                        window.location.hash = originalHash;
-                        await sleep(100);
-                    }
-
-                    renderResult(result);
-                    return;
+                    break;
                 }
 
-                setPanelStatus(
-                    `City detected in ${getCurrentVillageName()}. Checking the next village...`
+                setStatus(
+                    `City detected in ${getCurrentVillageName()}. Checking the next village...`,
+                    'working'
                 );
 
-                const moved = await moveVillage('next');
-
-                if (!moved) {
+                if (!await moveVillage('next')) {
                     throw new Error('The next-village control could not be used.');
                 }
 
@@ -875,7 +1066,49 @@
                 }
             }
 
-            throw new Error('The CP scan stopped after too many village checks.');
+            if (!requirementResult) {
+                throw new Error('Could not determine current and target CP.');
+            }
+
+            if (hops > 0) {
+                setStatus(
+                    'CP requirement found. Returning to the starting village...',
+                    'working'
+                );
+
+                if (!await restoreStartingVillage(hops)) {
+                    throw new Error('Could not return to the village where the scan started.');
+                }
+            }
+
+            setStatus(
+                'Opening Villages Overview and reading total CP/day...',
+                'working'
+            );
+
+            openCulturePointsOverview();
+            await sleep(250);
+
+            const cpPerDay = await waitForTotalCpPerDay();
+
+            if (!Number.isFinite(cpPerDay)) {
+                throw new Error(
+                    'The Culture Points overview opened, but total CP/day could not be read.'
+                );
+            }
+
+            const result = {
+                ...requirementResult,
+                cpPerDay
+            };
+
+            if (window.location.hash !== originalHash) {
+                window.location.hash = originalHash;
+                await sleep(100);
+            }
+
+            renderResult(result);
+            setStatus('CP scan complete.', 'success');
         } catch (error) {
             console.error('[APES CP Manager] Scan failed.', error);
 
@@ -884,7 +1117,7 @@
                     await restoreStartingVillage(hops);
                 } catch (restoreError) {
                     console.warn(
-                        '[APES CP Manager] Could not restore the starting village.',
+                        '[APES CP Manager] Could not restore starting village after failure.',
                         restoreError
                     );
                 }
@@ -894,46 +1127,39 @@
                 window.location.hash = originalHash;
             }
 
-            setPanelStatus(
-                error?.message || 'Could not read culture point progress.',
-                true
+            setStatus(
+                error?.message || 'Could not scan culture point information.',
+                'error'
             );
         } finally {
-            scanInProgress = false;
-            toggleButton.classList.remove('qol-cp-scanning');
+            isScanning = false;
+            setScanButtonState(false, 'Scan CP');
             requestAnimationFrame(positionToggleButton);
         }
     }
 
     function destroyUI() {
-        const toggleButton = document.getElementById(TOGGLE_ID);
-        const panel = document.getElementById(PANEL_ID);
-
-        if (toggleButton) toggleButton.remove();
-        if (panel) panel.remove();
-
-        scanInProgress = false;
+        document.getElementById(PANEL_ID)?.remove();
+        document.getElementById(TOGGLE_ID)?.remove();
+        isScanning = false;
     }
 
     function ensureUI() {
-        if (!document.body) return;
+        if (!document.body) {
+            return;
+        }
+
+        ensureSettingsCard();
 
         if (!isEnabled()) {
             destroyUI();
-            ensureSettingsCard();
             return;
         }
 
         injectStyles();
-        createPanel();
+        mountPanel();
         mountToggleButton();
-        ensureSettingsCard();
-
-        if (typeof window.qolRepositionAllButtons === 'function') {
-            window.qolRepositionAllButtons();
-        }
-
-        requestAnimationFrame(positionToggleButton);
+        positionToggleButton();
     }
 
     window.addEventListener('qol_setting_changed', event => {
@@ -943,7 +1169,9 @@
     });
 
     window.addEventListener('qol_close_others', event => {
-        if (event.detail?.source === 'cpManager') return;
+        if (event.detail?.source === 'cpManager') {
+            return;
+        }
 
         const panel = document.getElementById(PANEL_ID);
 
@@ -953,15 +1181,19 @@
     });
 
     window.addEventListener('resize', () => {
-        requestAnimationFrame(positionToggleButton);
-    });
+        positionToggleButton();
 
-    window.addEventListener('hashchange', () => {
-        requestAnimationFrame(positionToggleButton);
+        const panel = document.getElementById(PANEL_ID);
+
+        if (panel && window.getComputedStyle(panel).display !== 'none') {
+            positionPanelUnderButton(panel);
+        }
     });
 
     document.addEventListener('keydown', event => {
-        if (event.key !== 'Escape') return;
+        if (event.key !== 'Escape') {
+            return;
+        }
 
         const panel = document.getElementById(PANEL_ID);
 
@@ -971,14 +1203,12 @@
     }, true);
 
     if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', ensureUI, {
-            once: true
-        });
+        document.addEventListener('DOMContentLoaded', ensureUI, { once: true });
     } else {
         ensureUI();
     }
 
     window.setInterval(ensureUI, 1200);
 
-    console.log('[APES CP Manager] Module initialized.');
+    console.log('[APES CP Manager] Initialized.');
 })();

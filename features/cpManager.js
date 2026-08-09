@@ -7,6 +7,7 @@
  * - Scan every village for Town Halls and queued celebrations.
  * - Predict the next CP target using queued celebration start times.
  * - After a scan, open a side-by-side CP Planner for Town Hall / celebration planning.
+ * - Simulate 24/7 celebrations for a user-defined planning period.
  * - Lock the game screen while automated CP scanning is running.
  */
 (function initCpManagerModule() {
@@ -263,6 +264,10 @@
             #${PLANNER_ID} .qol-cp-plan-stat{padding:6px 8px!important;background:#fff!important;border:1px solid #d3c4aa!important;border-radius:3px!important;min-width:0!important}
             #${PLANNER_ID} .qol-cp-plan-stat span{display:block!important;color:#77654d!important;font-size:8px!important;font-weight:bold!important;text-transform:uppercase!important}
             #${PLANNER_ID} .qol-cp-plan-stat strong{display:block!important;margin-top:2px!important;color:#3f3020!important;font-size:13px!important;overflow:hidden!important;text-overflow:ellipsis!important}
+            #${PLANNER_ID} .qol-cp-period-control{display:flex!important;align-items:center!important;gap:7px!important;padding:7px 9px!important;background:#f4eee2!important;border-bottom:1px solid #d6c8ae!important;color:#5b4630!important;font-size:10px!important;flex:0 0 auto!important}
+            #${PLANNER_ID} .qol-cp-period-control strong{font-size:10px!important;color:#4f3b24!important}
+            #${PLANNER_ID} .qol-cp-period-input{appearance:auto!important;-webkit-appearance:auto!important;width:70px!important;height:25px!important;padding:2px 5px!important;border:1px solid #a99473!important;border-radius:3px!important;background:#fff!important;color:#493821!important;font-size:11px!important;text-align:center!important}
+            #${PLANNER_ID} .qol-cp-period-hint{color:#84735d!important;font-size:9px!important}
             #${PLANNER_ID} .qol-cp-planner-table-wrap{overflow:auto!important;max-height:52vh!important;background:#fff!important}
             #${PLANNER_ID} .qol-cp-planner-table th:nth-child(1),#${PLANNER_ID} .qol-cp-planner-table td:nth-child(1){width:24%!important}
             #${PLANNER_ID} .qol-cp-planner-table th:nth-child(2),#${PLANNER_ID} .qol-cp-planner-table td:nth-child(2){width:14%!important;text-align:center!important}
@@ -996,6 +1001,24 @@
         return Math.min(BIG_CELEBRATION_CAP, result.cpPerDay || 0);
     }
 
+    function getPlannerPeriodDays() {
+        const input = document.querySelector(`#${PLANNER_ID} .qol-cp-period-input`);
+        const value = Number.parseFloat(input?.value || '1');
+        if (!Number.isFinite(value) || value <= 0) return 1;
+        return Math.min(365, Math.max(0.25, value));
+    }
+
+    function count247StartsInPeriod(durationSeconds, busyUntilMs, periodDays, now = Date.now()) {
+        if (!Number.isFinite(durationSeconds) || durationSeconds <= 0) return 0;
+        if (!Number.isFinite(periodDays) || periodDays <= 0) return 0;
+
+        const periodEndMs = now + (periodDays * DAY_MS);
+        const firstStartMs = Math.max(now, Number.isFinite(busyUntilMs) ? busyUntilMs : now);
+        if (firstStartMs >= periodEndMs) return 0;
+
+        return Math.ceil((periodEndMs - firstStartMs) / (durationSeconds * 1000));
+    }
+
     function readPlannerPlans() {
         const planner = document.getElementById(PLANNER_ID);
         if (!planner || !lastScanResult) return [];
@@ -1024,8 +1047,9 @@
         });
     }
 
-    function buildPlannerPrediction(result, plans) {
+    function buildPlannerPrediction(result, plans, periodDays) {
         const now = Date.now();
+        const planEndMs = now + (periodDays * DAY_MS);
         const rate = result.cpPerDay > 0 ? result.cpPerDay / DAY_MS : 0;
         let estimatedCurrent = result.current + (Math.max(0, now - result.readAtMs) * rate);
 
@@ -1040,15 +1064,15 @@
             .map(event => ({ ...event, source: 'queued' }))
             .sort((a, b) => a.startMs - b.startMs);
 
-        // Every configured row schedules at least one future celebration.
-        // 24/7 only controls whether that celebration repeats after the first one.
         const sequences = plans
             .filter(plan => plan.level > 0 && plan.durationSeconds > 0 && plan.reward > 0)
             .map(plan => ({
                 ...plan,
                 nextStartMs: Math.max(now, plan.busyUntilMs || now),
+                planEndMs,
                 source: 'plan'
-            }));
+            }))
+            .filter(plan => !plan.run247 || plan.nextStartMs < plan.planEndMs);
 
         let cp = estimatedCurrent;
         let cursor = now;
@@ -1092,6 +1116,10 @@
             } else if (sequence) {
                 if (sequence.run247) {
                     sequence.nextStartMs += sequence.durationSeconds * 1000;
+                    if (sequence.nextStartMs >= sequence.planEndMs) {
+                        const index = sequences.indexOf(sequence);
+                        if (index >= 0) sequences.splice(index, 1);
+                    }
                 } else {
                     const index = sequences.indexOf(sequence);
                     if (index >= 0) sequences.splice(index, 1);
@@ -1108,7 +1136,9 @@
         if (!planner) return;
 
         const speedInfo = detectServerSpeed(lastScanResult);
-        let recurringCelebrationCpDay = 0;
+        const periodDays = getPlannerPeriodDays();
+        const now = Date.now();
+        let total247CpPeriod = 0;
         let oneOffCelebrationCp = 0;
 
         planner.querySelectorAll('.qol-cp-plan-row').forEach(row => {
@@ -1133,37 +1163,32 @@
                 ? (type === 'big' ? getBigReward(lastScanResult) : getSmallReward(village))
                 : 0;
 
-            const recurringCpDay = run247Input.checked && duration > 0
-                ? reward * 86400 / duration
-                : 0;
-            const displayedContribution = run247Input.checked
-                ? recurringCpDay
-                : reward;
+            let displayedContribution = 0;
+            let contributionTitle = '';
 
-            if (run247Input.checked) {
-                recurringCelebrationCpDay += recurringCpDay;
-            } else {
+            if (run247Input.checked && duration > 0 && reward > 0) {
+                const starts = count247StartsInPeriod(duration, village.busyUntilMs, periodDays, now);
+                displayedContribution = reward * starts;
+                total247CpPeriod += displayedContribution;
+                contributionTitle = `${formatNumber(reward)} CP per celebration × ${starts} ${starts === 1 ? 'start' : 'starts'} within ${periodDays} ${periodDays === 1 ? 'day' : 'days'} = ${formatNumber(displayedContribution)} CP`;
+            } else if (reward > 0) {
+                displayedContribution = reward;
                 oneOffCelebrationCp += reward;
+                contributionTitle = `${formatNumber(reward)} CP from one planned celebration`;
             }
 
             row.querySelector('.qol-cp-plan-duration').textContent = duration ? secondsToTimeString(duration) : '-';
             row.querySelector('.qol-cp-plan-cpday').textContent = displayedContribution > 0
                 ? formatNumber(displayedContribution)
                 : '-';
-            row.querySelector('.qol-cp-plan-cpday').title = reward > 0
-                ? (
-                    run247Input.checked
-                        ? `${formatNumber(reward)} CP per celebration, repeated 24/7 (${formatNumber(recurringCpDay)} average CP/day)`
-                        : `${formatNumber(reward)} CP from one planned celebration`
-                )
-                : '';
+            row.querySelector('.qol-cp-plan-cpday').title = contributionTitle;
         });
 
         const plans = readPlannerPlans();
-        const prediction = buildPlannerPrediction(lastScanResult, plans);
+        const prediction = buildPlannerPrediction(lastScanResult, plans, periodDays);
 
         planner.querySelector('.qol-cp-plan-base').textContent = formatNumber(lastScanResult.cpPerDay);
-        planner.querySelector('.qol-cp-plan-celebrations').textContent = formatNumber(recurringCelebrationCpDay);
+        planner.querySelector('.qol-cp-plan-celebrations').textContent = formatNumber(total247CpPeriod);
         planner.querySelector('.qol-cp-plan-oneoff').textContent = formatNumber(oneOffCelebrationCp);
         planner.querySelector('.qol-cp-plan-eta').textContent = prediction.text;
         planner.querySelector('.qol-cp-speed').textContent = `Detected x${speedInfo.speed} · ${speedInfo.source}`;
@@ -1217,21 +1242,28 @@
         planner.querySelector('.qol-cp-planner-body').innerHTML = `
             <div class="qol-cp-planner-summary">
                 <div class="qol-cp-plan-stat"><span>Base CP / Day</span><strong class="qol-cp-plan-base">-</strong></div>
-                <div class="qol-cp-plan-stat"><span>24/7 Celebration CP / Day</span><strong class="qol-cp-plan-celebrations">-</strong></div>
+                <div class="qol-cp-plan-stat"><span>24/7 CP / Period</span><strong class="qol-cp-plan-celebrations">-</strong></div>
                 <div class="qol-cp-plan-stat"><span>One-off Celebration CP</span><strong class="qol-cp-plan-oneoff">-</strong></div>
                 <div class="qol-cp-plan-stat"><span>Planner ETA</span><strong class="qol-cp-plan-eta" style="font-size:10px!important">-</strong></div>
             </div>
+            <div class="qol-cp-period-control">
+                <strong>24/7 planning period</strong>
+                <input type="number" class="qol-cp-period-input" min="0.25" max="365" step="0.25" value="1" aria-label="24/7 celebration planning period in days">
+                <span>days</span>
+                <span class="qol-cp-period-hint">Only celebration starts inside this period count toward 24/7 CP.</span>
+            </div>
             <div class="qol-cp-planner-table-wrap">
                 <table class="qol-cp-planner-table">
-                    <thead><tr><th>Village</th><th>Town Hall</th><th>Celebration</th><th>24/7</th><th>Duration</th><th>Extra CP / Day*</th></tr></thead>
+                    <thead><tr><th>Village</th><th>Town Hall</th><th>Celebration</th><th>24/7</th><th>Duration</th><th>Extra CP / Period*</th></tr></thead>
                     <tbody>${rows}</tbody>
                 </table>
             </div>
-            <div class="qol-cp-plan-note">Every village with a selected Town Hall level plans <strong>one</strong> selected celebration. Leave <strong>24/7</strong> unticked to count that celebration once; tick it to repeat the celebration continuously after the first one. In the last column, unticked rows show the one-off CP reward, while ticked rows show average recurring CP/day. Big Celebration becomes available at Town Hall level 10. Town Hall construction/upgrade time and resource costs are not included yet.</div>
+            <div class="qol-cp-plan-note">Every village with a selected Town Hall level plans <strong>one</strong> selected celebration. Leave <strong>24/7</strong> unticked to count that celebration once. Tick it to run the selected celebration continuously for the planning period above. For 24/7 rows, <strong>Extra CP / Period</strong> counts only celebration starts that actually occur before the selected period ends; existing scanned queues delay when the new plan can begin. Big Celebration becomes available at Town Hall level 10. Town Hall construction/upgrade time and resource costs are not included yet.</div>
         `;
 
         planner.querySelector('.qol-cp-speed').textContent = `Detected x${speedInfo.speed} · ${speedInfo.source}`;
         planner.querySelectorAll('select,input').forEach(control => control.addEventListener('change', updatePlanner));
+        planner.querySelector('.qol-cp-period-input')?.addEventListener('input', updatePlanner);
         planner.style.setProperty('display', 'flex', 'important');
         planner.dataset.userPositioned = 'false';
         requestAnimationFrame(() => {
@@ -1595,5 +1627,5 @@
     }
 
     window.setInterval(ensureUI, 1200);
-    console.log('[APES CP Manager] Unified planner + scan lock initialized.');
+    console.log('[APES CP Manager] Period-aware planner + scan lock initialized.');
 })();

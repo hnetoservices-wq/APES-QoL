@@ -7,6 +7,7 @@
  * - Scan every village for Town Halls and queued celebrations.
  * - Predict the next CP target using queued celebration start times.
  * - After a scan, open a side-by-side CP Planner for Town Hall / celebration planning.
+ * - Lock the game screen while automated CP scanning is running.
  */
 (function initCpManagerModule() {
     'use strict';
@@ -17,6 +18,7 @@
     const TOGGLE_ID = 'qol-cp-toggle-btn';
     const STYLE_ID = 'qol-cp-manager-styles';
     const MENU_CHECKBOX_ID = 'qol-chk-cp-manager';
+    const SCAN_OVERLAY_ID = 'qol-cp-scan-overlay';
 
     const MAIN_BUILDING_LOCATION = 27;
     const TOWN_HALL_BUILDING_ID = 24;
@@ -399,11 +401,60 @@
         handle.addEventListener('pointercancel', finish);
     }
 
+    function showScanOverlay() {
+        removeScanOverlay();
+        if (!document.body) return;
+
+        const overlay = document.createElement('div');
+        overlay.id = SCAN_OVERLAY_ID;
+        overlay.setAttribute('role', 'status');
+        overlay.setAttribute('aria-live', 'polite');
+        overlay.style.cssText = `
+            position: fixed !important;
+            top: 0 !important;
+            left: 0 !important;
+            width: 100vw !important;
+            height: 100vh !important;
+            background-color: rgba(0, 0, 0, 0.7) !important;
+            z-index: 2147483646 !important;
+            display: flex !important;
+            align-items: center !important;
+            justify-content: center !important;
+            color: white !important;
+            font-family: Arial, sans-serif !important;
+            font-size: 15px !important;
+            font-weight: bold !important;
+            flex-direction: column !important;
+            gap: 8px !important;
+            text-align: center !important;
+            cursor: wait !important;
+            user-select: none !important;
+            pointer-events: auto !important;
+        `;
+        overlay.innerHTML = `
+            <div>Scanning CP...</div>
+            <div class="qol-cp-scan-overlay-status" style="max-width:min(520px,80vw)!important;font-size:11px!important;font-weight:normal!important;color:#ddd!important;line-height:1.45!important;">Starting CP scan...</div>
+            <div style="margin-top:2px!important;font-size:10px!important;font-weight:normal!important;color:#aaa!important;">Please wait while APES checks your villages and Town Halls.</div>
+        `;
+        document.body.appendChild(overlay);
+    }
+
+    function updateScanOverlay(message) {
+        const status = document.querySelector(`#${SCAN_OVERLAY_ID} .qol-cp-scan-overlay-status`);
+        if (status) status.textContent = message || 'Scanning culture point information...';
+    }
+
+    function removeScanOverlay() {
+        document.getElementById(SCAN_OVERLAY_ID)?.remove();
+    }
+
     function setStatus(message, tone = 'neutral') {
         const element = document.querySelector(`#${PANEL_ID} .qol-cp-status`);
-        if (!element) return;
-        element.textContent = message;
-        element.dataset.tone = tone;
+        if (element) {
+            element.textContent = message;
+            element.dataset.tone = tone;
+        }
+        if (isScanning) updateScanOverlay(message);
     }
 
     function setScanButtonState(disabled, text) {
@@ -1223,6 +1274,7 @@
 
         resetResults();
         setScanButtonState(true, 'Scanning...');
+        showScanOverlay();
         setStatus('Opening Main Building and reading city-founding CP...', 'working');
 
         try {
@@ -1274,6 +1326,7 @@
             if (window.location.hash !== originalHash) window.location.hash = originalHash;
             setStatus(error?.message || 'Could not scan culture point information.', 'error');
         } finally {
+            removeScanOverlay();
             isScanning = false;
             setScanButtonState(false, 'Scan CP');
             requestAnimationFrame(positionToggleButton);
@@ -1482,6 +1535,7 @@
     }
 
     function destroyUI() {
+        removeScanOverlay();
         document.getElementById(PANEL_ID)?.remove();
         document.getElementById(PLANNER_ID)?.remove();
         document.getElementById(TOGGLE_ID)?.remove();
@@ -1521,6 +1575,9 @@
         }
     });
 
+    window.addEventListener('pagehide', removeScanOverlay);
+    window.addEventListener('beforeunload', removeScanOverlay);
+
     document.addEventListener('keydown', event => {
         if (event.key !== 'Escape') return;
         const planner = document.getElementById(PLANNER_ID);
@@ -1538,5 +1595,5 @@
     }
 
     window.setInterval(ensureUI, 1200);
-    console.log('[APES CP Manager] One-off + 24/7 planner module initialized.');
+    console.log('[APES CP Manager] Unified planner + scan lock initialized.');
 })();

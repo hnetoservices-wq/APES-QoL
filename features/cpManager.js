@@ -2,15 +2,21 @@
  * APES QoL Extension
  * Module: Culture Point Manager
  *
- * One unified scan:
+ * Unified scan:
  * 1. Reads current/target CP from Main Building location 27.
  * 2. Skips city villages until a normal village is found.
  * 3. Reads total CP/day from Villages Overview -> Culture Points.
- * 4. Calculates the ETA for the next CP target.
- * 5. Scans every village for Town Hall (buildingId24), level and location.
- * 6. Restores the village/page where the user started.
+ * 4. Scans every village for Town Hall (buildingId24), level and location.
+ * 5. Opens detected Town Halls and reads active/queued celebrations.
+ * 6. Calculates the next CP target ETA using continuous CP/day production plus
+ *    celebration rewards at their START time.
+ * 7. Restores the village/page where the user started.
  *
- * Celebrations are intentionally not included yet.
+ * Celebration rule:
+ * - CP is granted when a celebration STARTS.
+ * - A celebration that started before Current CP was read is already included
+ *   in Current CP and must not be added again.
+ * - Celebrations starting after Current CP was read are discrete future CP events.
  */
 
 (function initCpManagerModule() {
@@ -25,6 +31,10 @@
     const MAIN_BUILDING_LOCATION = 27;
     const TOWN_HALL_BUILDING_ID = 24;
     const MAX_VILLAGE_HOPS = 100;
+
+    const SMALL_CELEBRATION_REWARD = 500;
+    const BIG_CELEBRATION_REWARD = 2000;
+    const DAY_MS = 24 * 60 * 60 * 1000;
 
     let isScanning = false;
 
@@ -68,14 +78,10 @@
         }
 
         switch (day % 10) {
-            case 1:
-                return 'st';
-            case 2:
-                return 'nd';
-            case 3:
-                return 'rd';
-            default:
-                return 'th';
+            case 1: return 'st';
+            case 2: return 'nd';
+            case 3: return 'rd';
+            default: return 'th';
         }
     }
 
@@ -88,34 +94,27 @@
         return `${day}${getOrdinalSuffix(day)} ${month}, at ${hours}h${minutes}m`;
     }
 
-    function buildPrediction(current, target, cpPerDay) {
-        const remaining = Math.max(0, target - current);
-
-        if (remaining <= 0) {
-            return {
-                text: 'Next CP target reached',
-                targetDate: null,
-                exactMinutes: 0
-            };
-        }
-
-        if (!Number.isFinite(cpPerDay) || cpPerDay <= 0) {
-            return {
-                text: 'Next CP estimate unavailable',
-                targetDate: null,
-                exactMinutes: null
-            };
-        }
-
-        const exactMinutes = Math.max(
-            1,
-            Math.ceil((remaining / cpPerDay) * 24 * 60)
+    function formatPredictionResult(targetMs, celebrationsApplied) {
+        const nowMs = Date.now();
+        const roundedTargetMs = Math.ceil(targetMs / 60000) * 60000;
+        const totalMinutes = Math.max(
+            0,
+            Math.ceil((roundedTargetMs - nowMs) / 60000)
         );
 
-        const days = Math.floor(exactMinutes / (24 * 60));
-        const hours = Math.floor((exactMinutes % (24 * 60)) / 60);
-        const targetDate = new Date(Date.now() + (exactMinutes * 60 * 1000));
+        const targetDate = new Date(roundedTargetMs);
 
+        if (totalMinutes <= 0) {
+            return {
+                text: `Next CP target should now be reached (${formatTargetDate(targetDate)})`,
+                targetDate,
+                exactMinutes: 0,
+                celebrationsApplied
+            };
+        }
+
+        const days = Math.floor(totalMinutes / (24 * 60));
+        const hours = Math.floor((totalMinutes % (24 * 60)) / 60);
         const dayLabel = days === 1 ? 'day' : 'days';
         const hourLabel = hours === 1 ? 'hour' : 'hours';
 
@@ -124,8 +123,89 @@
                 `Next CP in ${days} ${dayLabel}, ${hours} ${hourLabel} ` +
                 `on ${formatTargetDate(targetDate)}`,
             targetDate,
-            exactMinutes
+            exactMinutes: totalMinutes,
+            celebrationsApplied
         };
+    }
+
+    function buildPrediction(
+        current,
+        target,
+        cpPerDay,
+        celebrationEvents = [],
+        cpReadAtMs = Date.now()
+    ) {
+        const remaining = Math.max(0, target - current);
+
+        if (remaining <= 0) {
+            return {
+                text: 'Next CP target reached',
+                targetDate: null,
+                exactMinutes: 0,
+                celebrationsApplied: []
+            };
+        }
+
+        const baselineMs = Number.isFinite(cpReadAtMs)
+            ? cpReadAtMs
+            : Date.now();
+
+        const ratePerMs = Number.isFinite(cpPerDay) && cpPerDay > 0
+            ? cpPerDay / DAY_MS
+            : 0;
+
+        const events = celebrationEvents
+            .filter(event => (
+                Number.isFinite(event.startMs) &&
+                Number.isFinite(event.reward) &&
+                event.reward > 0 &&
+                event.startMs > baselineMs
+            ))
+            .sort((a, b) => a.startMs - b.startMs);
+
+        let projectedCp = current;
+        let cursorMs = baselineMs;
+        const celebrationsApplied = [];
+
+        for (const event of events) {
+            const elapsedMs = Math.max(0, event.startMs - cursorMs);
+            const cpBeforeEvent = projectedCp + (elapsedMs * ratePerMs);
+
+            if (ratePerMs > 0 && cpBeforeEvent >= target) {
+                const neededMs = (target - projectedCp) / ratePerMs;
+                return formatPredictionResult(
+                    cursorMs + Math.max(0, neededMs),
+                    celebrationsApplied
+                );
+            }
+
+            projectedCp = cpBeforeEvent + event.reward;
+            cursorMs = event.startMs;
+            celebrationsApplied.push(event);
+
+            if (projectedCp >= target) {
+                return formatPredictionResult(
+                    event.startMs,
+                    celebrationsApplied
+                );
+            }
+        }
+
+        if (ratePerMs <= 0) {
+            return {
+                text: 'Next CP estimate unavailable',
+                targetDate: null,
+                exactMinutes: null,
+                celebrationsApplied
+            };
+        }
+
+        const neededMs = (target - projectedCp) / ratePerMs;
+
+        return formatPredictionResult(
+            cursorMs + Math.max(0, neededMs),
+            celebrationsApplied
+        );
     }
 
     function injectStyles() {
@@ -191,7 +271,7 @@
                 position: fixed !important;
                 display: none;
                 flex-direction: column !important;
-                width: 450px !important;
+                width: 470px !important;
                 max-width: 94vw !important;
                 max-height: 88vh !important;
                 margin: 0 !important;
@@ -423,7 +503,7 @@
             }
 
             #${PANEL_ID} .qol-cp-townhall-table-wrap {
-                max-height: 190px !important;
+                max-height: 210px !important;
                 overflow-y: auto !important;
             }
 
@@ -458,17 +538,17 @@
 
             #${PANEL_ID} .qol-cp-townhalls th:nth-child(1),
             #${PANEL_ID} .qol-cp-townhalls td:nth-child(1) {
-                width: 46% !important;
+                width: 43% !important;
             }
 
             #${PANEL_ID} .qol-cp-townhalls th:nth-child(2),
             #${PANEL_ID} .qol-cp-townhalls td:nth-child(2) {
-                width: 32% !important;
+                width: 30% !important;
             }
 
             #${PANEL_ID} .qol-cp-townhalls th:nth-child(3),
             #${PANEL_ID} .qol-cp-townhalls td:nth-child(3) {
-                width: 22% !important;
+                width: 27% !important;
                 text-align: center !important;
             }
 
@@ -485,6 +565,22 @@
                 background-color: #faf7f1 !important;
                 color: #7a6a55 !important;
                 font-size: 9px !important;
+                line-height: 1.45 !important;
+            }
+
+            #${PANEL_ID} .qol-cp-celebrations {
+                display: none;
+                padding: 7px 9px !important;
+                border: 1px solid #d5c4a9 !important;
+                border-radius: 3px !important;
+                background-color: #fffaf0 !important;
+                color: #5b4630 !important;
+                font-size: 10px !important;
+                line-height: 1.45 !important;
+            }
+
+            #${PANEL_ID} .qol-cp-celebrations strong {
+                color: #4b3822 !important;
             }
 
             #${PANEL_ID} .qol-cp-meta {
@@ -540,8 +636,8 @@
         }
 
         const buttonRect = toggleButton.getBoundingClientRect();
-        const panelWidth = panel.offsetWidth || 450;
-        const panelHeight = panel.offsetHeight || 360;
+        const panelWidth = panel.offsetWidth || 470;
+        const panelHeight = panel.offsetHeight || 380;
 
         const maximumLeft = Math.max(10, window.innerWidth - panelWidth - 10);
         const maximumTop = Math.max(10, window.innerHeight - panelHeight - 10);
@@ -640,6 +736,46 @@
         section.style.setProperty('display', 'block', 'important');
     }
 
+    function renderCelebrations(townHallScan) {
+        const panel = document.getElementById(PANEL_ID);
+        const section = panel?.querySelector('.qol-cp-celebrations');
+
+        if (!section) {
+            return;
+        }
+
+        const events = townHallScan.celebrationEvents;
+
+        if (!events.length) {
+            section.innerHTML = `
+                <strong>Upcoming celebrations:</strong>
+                None detected. Celebrations already started are included in Current CP.
+            `;
+            section.style.setProperty('display', 'block', 'important');
+            return;
+        }
+
+        const sorted = [...events].sort((a, b) => a.startMs - b.startMs);
+        const total = sorted.reduce((sum, event) => sum + event.reward, 0);
+
+        const lines = sorted.map(event => {
+            const typeLabel = event.type === 'small' ? 'Small' : 'Big';
+            const when = formatTargetDate(new Date(event.startMs));
+
+            return (
+                `${escapeHtml(event.villageName)}: ` +
+                `${typeLabel} +${formatNumber(event.reward)} CP on ${when}`
+            );
+        }).join('<br>');
+
+        section.innerHTML = `
+            <strong>Upcoming celebrations:</strong>
+            ${sorted.length} queued, +${formatNumber(total)} CP scheduled.<br>
+            ${lines}
+        `;
+        section.style.setProperty('display', 'block', 'important');
+    }
+
     function renderResult(result) {
         const panel = document.getElementById(PANEL_ID);
 
@@ -696,6 +832,7 @@
         progressBox.style.setProperty('display', 'block', 'important');
 
         renderTownHalls(result.townHalls);
+        renderCelebrations(result.townHalls);
 
         meta.innerHTML = `
             CP requirement read from <strong>${escapeHtml(result.villageName)}</strong>${
@@ -703,7 +840,9 @@
                     ? ` after skipping ${result.skippedCities} ${result.skippedCities === 1 ? 'city' : 'cities'}.`
                     : '.'
             }
-            Celebrations are not included in CP/day calculations or the prediction yet.
+            CP/day is continuous production. Celebration CP is added at celebration
+            start time. Celebrations that had already started when Current CP was read
+            are not counted twice.
         `;
 
         meta.style.setProperty('display', 'block', 'important');
@@ -719,6 +858,7 @@
         const results = panel.querySelector('.qol-cp-results');
         const progressBox = panel.querySelector('.qol-cp-progress-box');
         const townHalls = panel.querySelector('.qol-cp-townhalls');
+        const celebrations = panel.querySelector('.qol-cp-celebrations');
         const meta = panel.querySelector('.qol-cp-meta');
 
         results.innerHTML = '';
@@ -733,6 +873,9 @@
 
         townHalls.innerHTML = '';
         townHalls.style.setProperty('display', 'none', 'important');
+
+        celebrations.innerHTML = '';
+        celebrations.style.setProperty('display', 'none', 'important');
 
         meta.innerHTML = '';
         meta.style.setProperty('display', 'none', 'important');
@@ -756,7 +899,7 @@
 
             <div class="qol-cp-body">
                 <div class="qol-cp-description">
-                    Scan your CP progress, daily production, next target ETA and Town Halls across all villages.
+                    Scan CP progress, daily production, Town Halls, queued celebrations and the next CP target ETA.
                 </div>
 
                 <div class="qol-cp-controls">
@@ -779,7 +922,7 @@
                 </div>
 
                 <div class="qol-cp-townhalls"></div>
-
+                <div class="qol-cp-celebrations"></div>
                 <div class="qol-cp-meta"></div>
             </div>
         `;
@@ -967,7 +1110,7 @@
                     <h3 class="qol-feature-name">CP Manager</h3>
 
                     <p class="qol-feature-desc">
-                        Tracks CP progress, prediction and Town Halls across your villages.
+                        Tracks CP progress, prediction, Town Halls and queued celebrations across your villages.
                     </p>
                 </div>
 
@@ -1010,7 +1153,6 @@
 
     function findTownBox() {
         const boxes = Array.from(document.querySelectorAll('.foundTown.contentBox'));
-
         return boxes.find(box => box.querySelector('.townConditionTable')) || null;
     }
 
@@ -1103,6 +1245,20 @@
         if (villageId) {
             route.push(`villId:${villageId}`);
         }
+
+        setVillageHash(route);
+    }
+
+    function openTownHallWindow(location) {
+        const villageId = getVillageIdFromHash();
+        const route = ['page:village'];
+
+        if (villageId) {
+            route.push(`villId:${villageId}`);
+        }
+
+        route.push(`location:${location}`);
+        route.push('window:building');
 
         setVillageHash(route);
     }
@@ -1403,15 +1559,199 @@
 
         return {
             villageName: getCurrentVillageName(),
+            villageId: getVillageIdFromHash(),
             level: Number.isFinite(level) ? level : null,
-            location: Number.isFinite(location) ? location : null
+            location: Number.isFinite(location) ? location : null,
+            celebrations: []
         };
     }
 
-    async function scanTownHalls() {
+    async function waitForTownHallContent(timeoutMs = 5500) {
+        const startedAt = performance.now();
+
+        while (performance.now() - startedAt < timeoutMs) {
+            const celebrationBox = document.querySelector('.celebrationBox');
+            const celebrationItems = document.querySelectorAll('.orderItem.item.celebration');
+
+            if (celebrationBox || celebrationItems.length > 0) {
+                return true;
+            }
+
+            await sleep(100);
+        }
+
+        return false;
+    }
+
+    function getCelebrationType(card) {
+        const image = card.querySelector('img.itemImage.celebration');
+        const displayedReward = parseInteger(
+            card.querySelector('.headerTrapezoidal .content')?.textContent
+        );
+
+        if (image?.classList.contains('celebration_small_illu')) {
+            return {
+                type: 'small',
+                reward: Number.isFinite(displayedReward)
+                    ? displayedReward
+                    : SMALL_CELEBRATION_REWARD
+            };
+        }
+
+        if (image?.classList.contains('celebration_large_illu')) {
+            return {
+                type: 'big',
+                reward: Number.isFinite(displayedReward)
+                    ? displayedReward
+                    : BIG_CELEBRATION_REWARD
+            };
+        }
+
+        const header = card.querySelector('.itemHead')?.textContent?.trim() || '';
+
+        if (/small/i.test(header)) {
+            return {
+                type: 'small',
+                reward: Number.isFinite(displayedReward)
+                    ? displayedReward
+                    : SMALL_CELEBRATION_REWARD
+            };
+        }
+
+        if (/(large|big)/i.test(header)) {
+            return {
+                type: 'big',
+                reward: Number.isFinite(displayedReward)
+                    ? displayedReward
+                    : BIG_CELEBRATION_REWARD
+            };
+        }
+
+        return null;
+    }
+
+    function readCelebrationsForCurrentTownHall(townHall, cpReadAtMs) {
+        const cards = Array.from(
+            document.querySelectorAll('.orderItem.item.celebration')
+        );
+
+        const events = [];
+        const seen = new Set();
+        const baselineMs = Number.isFinite(cpReadAtMs)
+            ? cpReadAtMs
+            : Date.now();
+
+        cards.forEach(card => {
+            const celebration = getCelebrationType(card);
+
+            if (!celebration) {
+                return;
+            }
+
+            const progressbar = card.querySelector(
+                '.progressContainer .progressbar[finish-time][duration]'
+            );
+
+            if (!progressbar) {
+                return;
+            }
+
+            const finishSeconds = Number.parseInt(
+                progressbar.getAttribute('finish-time') || '',
+                10
+            );
+
+            const durationSeconds = Number.parseInt(
+                progressbar.getAttribute('duration') || '',
+                10
+            );
+
+            const queueCount = Math.max(
+                1,
+                Number.parseInt(
+                    card.querySelector('.queueAmount')?.textContent || '1',
+                    10
+                ) || 1
+            );
+
+            if (
+                !Number.isFinite(finishSeconds) ||
+                !Number.isFinite(durationSeconds) ||
+                durationSeconds <= 0
+            ) {
+                return;
+            }
+
+            // Travian exposes the item's finish timestamp and its full duration.
+            // Therefore: celebration start = finish - duration.
+            // If queueAmount is greater than one, subsequent identical celebrations
+            // begin one duration after the previous one.
+            const firstStartSeconds = finishSeconds - durationSeconds;
+
+            for (let index = 0; index < queueCount; index += 1) {
+                const startSeconds = firstStartSeconds + (index * durationSeconds);
+                const startMs = startSeconds * 1000;
+
+                // Current CP was read at cpReadAtMs. Anything that started before
+                // that instant has already granted its CP and is already reflected
+                // in Current CP. Only later starts belong in the prediction timeline.
+                if (startMs <= baselineMs) {
+                    continue;
+                }
+
+                const key = [
+                    townHall.villageId || townHall.villageName,
+                    celebration.type,
+                    startSeconds
+                ].join(':');
+
+                if (seen.has(key)) {
+                    continue;
+                }
+
+                seen.add(key);
+
+                events.push({
+                    villageName: townHall.villageName,
+                    villageId: townHall.villageId,
+                    type: celebration.type,
+                    reward: celebration.reward,
+                    startMs,
+                    finishMs: (startSeconds + durationSeconds) * 1000,
+                    durationSeconds
+                });
+            }
+        });
+
+        events.sort((a, b) => a.startMs - b.startMs);
+        return events;
+    }
+
+    async function scanTownHallCelebrations(townHall, cpReadAtMs) {
+        if (!Number.isFinite(townHall.location)) {
+            return [];
+        }
+
+        openTownHallWindow(townHall.location);
+        await sleep(250);
+
+        const loaded = await waitForTownHallContent();
+
+        if (!loaded) {
+            return [];
+        }
+
+        return readCelebrationsForCurrentTownHall(
+            townHall,
+            cpReadAtMs
+        );
+    }
+
+    async function scanTownHalls(cpReadAtMs) {
         const startingIdentity = getVillageIdentity();
         const visited = new Set();
         const results = [];
+        const celebrationEvents = [];
 
         let hops = 0;
         let complete = false;
@@ -1443,15 +1783,35 @@
             const villageName = getCurrentVillageName();
 
             setStatus(
-                `Scanning Town Halls: ${villageName} (${visited.size})...`,
+                `Scanning Town Halls and celebrations: ${villageName} (${visited.size})...`,
                 'working'
             );
 
             const townHall = readTownHallInCurrentVillage();
 
             if (townHall) {
+                try {
+                    townHall.celebrations = await scanTownHallCelebrations(
+                        townHall,
+                        cpReadAtMs
+                    );
+
+                    townHall.celebrations.forEach(event => {
+                        celebrationEvents.push(event);
+                    });
+                } catch (error) {
+                    console.warn(
+                        `[APES CP Manager] Celebration scan failed for ${villageName}.`,
+                        error
+                    );
+                    townHall.celebrations = [];
+                }
+
                 results.push(townHall);
             }
+
+            openVillageBase();
+            await sleep(150);
 
             if (!await moveVillage('next')) {
                 complete = visited.size === 1;
@@ -1475,8 +1835,29 @@
             await restoreStartingVillage(hops);
         }
 
+        const uniqueEvents = [];
+        const seenEvents = new Set();
+
+        celebrationEvents
+            .sort((a, b) => a.startMs - b.startMs)
+            .forEach(event => {
+                const key = [
+                    event.villageId || event.villageName,
+                    event.type,
+                    event.startMs
+                ].join(':');
+
+                if (seenEvents.has(key)) {
+                    return;
+                }
+
+                seenEvents.add(key);
+                uniqueEvents.push(event);
+            });
+
         return {
             results,
+            celebrationEvents: uniqueEvents,
             scannedCount: visited.size,
             complete
         };
@@ -1517,7 +1898,8 @@
                     current: state.current,
                     target: state.target,
                     villageName: getCurrentVillageName(),
-                    skippedCities: hops
+                    skippedCities: hops,
+                    readAtMs: Date.now()
                 };
 
                 if (hops > 0) {
@@ -1592,18 +1974,20 @@
                 );
             }
 
-            const prediction = buildPrediction(
-                requirement.current,
-                requirement.target,
-                cpPerDay
-            );
-
             setStatus(
-                'Scanning all villages for Town Halls...',
+                'Scanning all villages for Town Halls and celebrations...',
                 'working'
             );
 
-            const townHalls = await scanTownHalls();
+            const townHalls = await scanTownHalls(requirement.readAtMs);
+
+            const prediction = buildPrediction(
+                requirement.current,
+                requirement.target,
+                cpPerDay,
+                townHalls.celebrationEvents,
+                requirement.readAtMs
+            );
 
             const result = {
                 ...requirement,
@@ -1619,10 +2003,19 @@
 
             renderResult(result);
 
+            const queuedCount = townHalls.celebrationEvents.length;
+
             setStatus(
                 townHalls.complete
-                    ? `CP scan complete. ${townHalls.results.length} Town Hall${townHalls.results.length === 1 ? '' : 's'} detected.`
-                    : `CP scan complete. Town Hall scan may be incomplete (${townHalls.scannedCount} villages scanned).`,
+                    ? (
+                        `CP scan complete. ${townHalls.results.length} Town Hall` +
+                        `${townHalls.results.length === 1 ? '' : 's'} detected, ` +
+                        `${queuedCount} celebration${queuedCount === 1 ? '' : 's'} accounted for.`
+                    )
+                    : (
+                        `CP scan complete. Town Hall scan may be incomplete ` +
+                        `(${townHalls.scannedCount} villages scanned).`
+                    ),
                 townHalls.complete ? 'success' : 'error'
             );
         } catch (error) {
@@ -1715,5 +2108,5 @@
 
     window.setInterval(ensureUI, 1200);
 
-    console.log('[APES CP Manager] Unified module initialized.');
+    console.log('[APES CP Manager] Unified celebrations-aware module initialized.');
 })();

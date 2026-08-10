@@ -7,6 +7,7 @@
  * - Available 9c/15c tiles remain available in the cropper planner.
  * - Natarian croppers are received from oasisNetworkBridge.js.
  * - Visual Aid Mode marks unscanned and scanned map tiles without automation.
+ * - Optional 9c/15c highlights tint discovered croppers orange/purple on the map.
  * - Tag Team Mode divides the shared map into deterministic A-F sections.
  */
 
@@ -26,6 +27,10 @@
   const TILE_STORAGE_KEY = `qol_tile_scanner_${window.location.hostname}`;
 
   const VISUAL_AID_STORAGE_KEY = `qol_oasis_visual_aid_${window.location.hostname}`;
+
+  const HIGHLIGHT_9C_STORAGE_KEY = `qol_oasis_highlight_9c_${window.location.hostname}`;
+
+  const HIGHLIGHT_15C_STORAGE_KEY = `qol_oasis_highlight_15c_${window.location.hostname}`;
 
   const LEGACY_TINT_STORAGE_KEY = `qol_oasis_tint_${window.location.hostname}`;
 
@@ -136,6 +141,10 @@
 
   let visualAidEnabled = loadVisualAidEnabled();
 
+  let highlight9cEnabled = loadCropperHighlightEnabled(HIGHLIGHT_9C_STORAGE_KEY);
+
+  let highlight15cEnabled = loadCropperHighlightEnabled(HIGHLIGHT_15C_STORAGE_KEY);
+
   let tagTeamConfig = loadTagTeamConfig();
 
   let tagTeamSession = loadTagTeamSession();
@@ -186,6 +195,65 @@
     } catch (error) {
       console.error("[APES Oasis Scanner] Failed to save the Visual Aid setting.", error);
     }
+  }
+
+  function loadCropperHighlightEnabled(storageKey) {
+    try {
+      return localStorage.getItem(storageKey) === "true";
+    } catch (error) {
+      return false;
+    }
+  }
+
+  function saveCropperHighlightSettings() {
+    try {
+      localStorage.setItem(HIGHLIGHT_9C_STORAGE_KEY, String(highlight9cEnabled));
+      localStorage.setItem(HIGHLIGHT_15C_STORAGE_KEY, String(highlight15cEnabled));
+    } catch (error) {
+      console.error("[APES Oasis Scanner] Failed to save cropper highlight settings.", error);
+    }
+  }
+
+  function updateCropperHighlightButtons() {
+    const button9c = document.getElementById("qol-oasis-highlight-9c");
+    const button15c = document.getElementById("qol-oasis-highlight-15c");
+
+    if (button9c) {
+      button9c.classList.toggle("is-active", highlight9cEnabled);
+      button9c.setAttribute("aria-pressed", String(highlight9cEnabled));
+      button9c.title = highlight9cEnabled
+        ? "Hide scanned 9c tiles"
+        : "Highlight scanned 9c tiles in orange";
+    }
+
+    if (button15c) {
+      button15c.classList.toggle("is-active", highlight15cEnabled);
+      button15c.setAttribute("aria-pressed", String(highlight15cEnabled));
+      button15c.title = highlight15cEnabled
+        ? "Hide scanned 15c tiles"
+        : "Highlight scanned 15c tiles in purple";
+    }
+  }
+
+  function toggleCropperHighlight(fieldType) {
+    if (fieldType === "9c") {
+      highlight9cEnabled = !highlight9cEnabled;
+    } else if (fieldType === "15c") {
+      highlight15cEnabled = !highlight15cEnabled;
+    } else {
+      return;
+    }
+
+    saveCropperHighlightSettings();
+    updateCropperHighlightButtons();
+    scheduleScannedOverlayRender();
+
+    const enabled = fieldType === "9c" ? highlight9cEnabled : highlight15cEnabled;
+
+    setStatus(
+      `${fieldType} map highlight ${enabled ? "enabled" : "disabled"}. ` +
+        "Scanning remains active.",
+    );
   }
 
   function getDefaultTagTeamConfig() {
@@ -665,7 +733,11 @@
 
       setStatus("Visual Aid Mode turned on.");
     } else {
-      removeScannedTileOverlay();
+      if (highlight9cEnabled || highlight15cEnabled) {
+        scheduleScannedOverlayRender();
+      } else {
+        removeScannedTileOverlay();
+      }
 
       setStatus("Visual Aid Mode turned off. Scanning remains active.");
     }
@@ -1877,7 +1949,11 @@
   }
 
   function ensureScannedTileOverlay() {
-    if (!isEnabled() || !visualAidEnabled || !isMapPage()) {
+    if (
+      !isEnabled() ||
+      (!visualAidEnabled && !highlight9cEnabled && !highlight15cEnabled) ||
+      !isMapPage()
+    ) {
       removeScannedTileOverlay();
       return false;
     }
@@ -2111,6 +2187,22 @@
     return Boolean(savedTiles[id] || savedOases[id] || savedCroppers[id]);
   }
 
+  function getStoredCropperType(id) {
+    const cropperType = savedCroppers[id]?.fieldType;
+
+    if (cropperType === "9c" || cropperType === "15c") {
+      return cropperType;
+    }
+
+    const tile = savedTiles[id];
+
+    if (tile?.fieldType === "9c" || tile?.fieldType === "15c") {
+      return tile.fieldType;
+    }
+
+    return getCropperType(tile?.distribution);
+  }
+
   function renderScannedTileOverlay() {
     if (!ensureScannedTileOverlay() || !scannedOverlay || !observedMapOverlay) {
       return;
@@ -2173,11 +2265,24 @@
 
         const id = `${x}|${y}`;
 
+        const cropperType = getStoredCropperType(id);
+
+        const highlight9c = highlight9cEnabled && cropperType === "9c";
+        const highlight15c = highlight15cEnabled && cropperType === "15c";
+
+        if (!visualAidEnabled && !highlight9c && !highlight15c) {
+          continue;
+        }
+
         const scanned = isVisualAidTileScanned(id);
 
         const tile = document.createElement("span");
 
-        tile.className = "qol-oasis-visual-tile " + (scanned ? "is-scanned" : "is-unscanned");
+        tile.className = "qol-oasis-visual-tile";
+
+        if (visualAidEnabled) {
+          tile.classList.add(scanned ? "is-scanned" : "is-unscanned");
+        }
 
         if (tagTeamConfig.enabled) {
           const primarySection = sections.find((section) =>
@@ -2218,6 +2323,14 @@
           ) {
             tile.classList.add("is-section-edge");
           }
+        }
+
+        if (highlight9c) {
+          tile.classList.add("is-highlight-9c");
+        }
+
+        if (highlight15c) {
+          tile.classList.add("is-highlight-15c");
         }
 
         tile.style.left = `${left}px`;
@@ -3569,6 +3682,38 @@
           !important;
       }
 
+      .qol-oasis-visual-tile.is-highlight-9c {
+        background:
+          rgba(242, 142, 43, 0.62)
+          !important;
+        filter:
+          none
+          !important;
+        opacity:
+          1
+          !important;
+        box-shadow:
+          inset 0 0 0 1px
+          rgba(125, 70, 10, 0.58)
+          !important;
+      }
+
+      .qol-oasis-visual-tile.is-highlight-15c {
+        background:
+          rgba(143, 99, 199, 0.64)
+          !important;
+        filter:
+          none
+          !important;
+        opacity:
+          1
+          !important;
+        box-shadow:
+          inset 0 0 0 1px
+          rgba(75, 43, 118, 0.62)
+          !important;
+      }
+
       #qol-oasis-toggle-btn {
         position: fixed !important;
         width: 30px !important;
@@ -4190,10 +4335,12 @@
           grid
           !important;
         grid-template-columns:
-          minmax(120px, 145px)
-          minmax(115px, 140px)
-          minmax(160px, 1fr)
-          minmax(115px, 140px)
+          minmax(105px, 1fr)
+          minmax(105px, 1fr)
+          minmax(130px, 1.3fr)
+          minmax(100px, 1fr)
+          auto
+          auto
           auto
           auto
           auto
@@ -4335,7 +4482,50 @@
           !important;
       }
 
+      .qol-oasis-action-btn.cropper-highlight-toggle {
+        min-width:
+          84px
+          !important;
+        background:
+          linear-gradient(
+            to bottom,
+            #666,
+            #444
+          )
+          !important;
+        border-color:
+          #333
+          !important;
+      }
+
+      .qol-oasis-action-btn.cropper-highlight-toggle.highlight-9c.is-active {
+        background:
+          linear-gradient(
+            to bottom,
+            #f2a23f,
+            #c97316
+          )
+          !important;
+        border-color:
+          #9b570e
+          !important;
+      }
+
+      .qol-oasis-action-btn.cropper-highlight-toggle.highlight-15c.is-active {
+        background:
+          linear-gradient(
+            to bottom,
+            #9c73cf,
+            #69439b
+          )
+          !important;
+        border-color:
+          #503076
+          !important;
+      }
+
       .qol-oasis-action-btn.visual-aid-toggle:hover,
+      .qol-oasis-action-btn.cropper-highlight-toggle:hover,
       #qol-tag-team-toggle:hover {
         filter:
           brightness(1.12)
@@ -4848,7 +5038,9 @@
           Hover any map tile to mark its coordinate as scanned,
           including empty terrain and occupied villages.
           Visual Aid Mode shows unscanned tiles in blue and
-          scanned tiles in red. Tag Team Mode divides the
+          scanned tiles in red. Highlight 9c marks discovered 9c tiles
+          orange, while Highlight 15c marks discovered 15c tiles purple.
+          Tag Team Mode divides the
           -59 to 59 map into identical shared sections while
           keeping all scanning completely manual.
         </div>
@@ -5068,6 +5260,28 @@
           </div>
 
           <div
+            id="qol-oasis-highlight-9c"
+            class="qol-oasis-action-btn cropper-highlight-toggle highlight-9c"
+            role="button"
+            tabindex="0"
+            aria-pressed="false"
+            title="Highlight scanned 9c tiles in orange"
+          >
+            Highlight 9c
+          </div>
+
+          <div
+            id="qol-oasis-highlight-15c"
+            class="qol-oasis-action-btn cropper-highlight-toggle highlight-15c"
+            role="button"
+            tabindex="0"
+            aria-pressed="false"
+            title="Highlight scanned 15c tiles in purple"
+          >
+            Highlight 15c
+          </div>
+
+          <div
             id="qol-oasis-copy"
             class="qol-oasis-action-btn"
           >
@@ -5164,6 +5378,24 @@
 
         toggleVisualAidMode();
       });
+
+    const bindCropperHighlightButton = (selector, fieldType) => {
+      const button = oasisContainer.querySelector(selector);
+
+      button.addEventListener("click", () => toggleCropperHighlight(fieldType));
+
+      button.addEventListener("keydown", (event) => {
+        if (event.key !== "Enter" && event.key !== " ") {
+          return;
+        }
+
+        event.preventDefault();
+        toggleCropperHighlight(fieldType);
+      });
+    };
+
+    bindCropperHighlightButton("#qol-oasis-highlight-9c", "9c");
+    bindCropperHighlightButton("#qol-oasis-highlight-15c", "15c");
 
     oasisContainer
       .querySelector("#qol-tag-team-toggle")
@@ -5275,6 +5507,7 @@
     });
 
     updateVisualAidToggleButton();
+    updateCropperHighlightButtons();
     updateTagTeamUI();
     renderResultsTable();
   }
@@ -5410,6 +5643,10 @@
     savedTiles = loadStoredObject(TILE_STORAGE_KEY);
 
     visualAidEnabled = loadVisualAidEnabled();
+
+    highlight9cEnabled = loadCropperHighlightEnabled(HIGHLIGHT_9C_STORAGE_KEY);
+
+    highlight15cEnabled = loadCropperHighlightEnabled(HIGHLIGHT_15C_STORAGE_KEY);
 
     tagTeamConfig = loadTagTeamConfig();
 

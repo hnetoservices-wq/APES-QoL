@@ -151,8 +151,16 @@
                 pointer-events: none !important;
             }
 
+            /*
+             * The tile tooltip has attached absolutely-positioned elements
+             * such as movement countdowns. A margin changes the tooltip's
+             * layout box without necessarily moving those attachments with it.
+             * `translate` moves the complete rendered tooltip as one unit while
+             * preserving Travian's own top/left positioning and centering.
+             */
             body.${ENABLED_BODY_CLASS} #tileInformation {
-                margin-top: 14px !important;
+                margin-top: 0 !important;
+                translate: 0 14px !important;
             }
         `;
         document.head.appendChild(style);

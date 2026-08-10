@@ -68,6 +68,13 @@ const BASIC_FEATURES = [
         description: 'Summarizes resources approaching the active village from trades, treasures and raids.'
     },
     {
+        id: 'qol-chk-resource-capacity-timer',
+        key: 'resourceCapacityTimer',
+        name: 'Resource Capacity Timer',
+        icon: '⏱',
+        description: 'Shows how long current production will take to fill storage, or how long negative production will take to empty it.'
+    },
+    {
         id: 'qol-chk-rally-parser',
         key: 'rallyPointParser',
         name: 'Rally Point Enhancer',

@@ -31,6 +31,7 @@
         "features/oasisScanner.js",
         "features/rallyPointEnhancer.js",
         "features/buildingQueueEnhanced.js",
+        "features/instantFinishKeybind.js",
         "features/igmEnhancer.js",
         "features/sendButtonsEnhancer.js",
         "features/chatSilencer.js",

@@ -13,6 +13,7 @@
     const FEATURE_KEY = 'resourceCapacityTimer';
     const STYLE_ID = 'qol-resource-capacity-timer-styles';
     const TIMER_CLASS = 'qol-resource-capacity-eta';
+    const ENABLED_BODY_CLASS = 'qol-resource-capacity-timer-enabled';
     const REFRESH_MS = 1000;
 
     const RESOURCES = [
@@ -46,8 +47,7 @@
         if (compactMatch) {
             const sign = compactMatch[1] === '-' ? -1 : 1;
             const number = Number.parseFloat(compactMatch[2].replace(',', '.'));
-            const suffix = compactMatch[3].toLowerCase();
-            const multiplier = suffix === 'm' ? 1000000 : 1000;
+            const multiplier = compactMatch[3].toLowerCase() === 'm' ? 1000000 : 1000;
             const result = sign * number * multiplier;
             return Number.isFinite(result) ? Math.round(result) : null;
         }
@@ -83,14 +83,8 @@
         const hours = Math.floor((totalMinutes % 1440) / 60);
         const minutes = totalMinutes % 60;
 
-        if (days > 0) {
-            return hours > 0 ? `${days}d ${hours}h` : `${days}d`;
-        }
-
-        if (hours > 0) {
-            return minutes > 0 ? `${hours}h ${minutes}m` : `${hours}h`;
-        }
-
+        if (days > 0) return hours > 0 ? `${days}d ${hours}h` : `${days}d`;
+        if (hours > 0) return minutes > 0 ? `${hours}h ${minutes}m` : `${hours}h`;
         return `${minutes}m`;
     }
 
@@ -117,11 +111,6 @@
         const style = document.createElement('style');
         style.id = STYLE_ID;
         style.textContent = `
-            /*
-             * Keep the extra line inside Travian's existing resource HUD
-             * footprint. We deliberately do not move or restyle
-             * #tileInformation; map tooltip positioning remains game-native.
-             */
             #resourceBar .production:has(.${TIMER_CLASS}) {
                 min-height: 27px !important;
                 padding: 1px 0 2px !important;
@@ -154,12 +143,27 @@
                 white-space: nowrap !important;
                 pointer-events: none !important;
             }
+
+            /*
+             * Travian's movement strip protrudes above #tileInformation.
+             * A 14px offset only cleared the tooltip box, not the attached
+             * attack strip. 30px gives the complete native tooltip assembly
+             * enough room below the two-line resource HUD while leaving the
+             * game's own horizontal positioning and centering untouched.
+             */
+            body.${ENABLED_BODY_CLASS} #tileInformation {
+                margin-top: 30px !important;
+            }
         `;
         document.head.appendChild(style);
     }
 
     function removeTimers() {
         document.querySelectorAll(`#resourceBar .${TIMER_CLASS}`).forEach(element => element.remove());
+    }
+
+    function setEnabledLayout(enabled) {
+        document.body?.classList.toggle(ENABLED_BODY_CLASS, Boolean(enabled));
     }
 
     function readResource(resource) {
@@ -174,15 +178,10 @@
 
         if (!progressbar || !productionNode) return null;
 
-        // Prefer Travian's raw numeric attributes. The visible UI abbreviates
-        // large capacities (for example 101000 as "101k"), which must not be
-        // interpreted as the literal value 101.
         const current = parseUnsignedInteger(progressbar.getAttribute('value'))
             ?? parseUnsignedInteger(amountNode?.textContent);
-
         const capacity = parseUnsignedInteger(progressbar.getAttribute('max-value'))
             ?? parseUnsignedInteger(capacityNode?.textContent);
-
         const production = parseSignedInteger(directText(productionNode));
 
         if (!Number.isFinite(current) || !Number.isFinite(capacity) || !Number.isFinite(production)) {
@@ -257,7 +256,10 @@
     }
 
     function refresh() {
-        if (!isEnabled()) {
+        const enabled = isEnabled();
+        setEnabledLayout(enabled);
+
+        if (!enabled) {
             removeTimers();
             return;
         }
@@ -271,15 +273,15 @@
 
     function start() {
         refresh();
-
-        if (intervalId === null) {
-            intervalId = window.setInterval(refresh, REFRESH_MS);
-        }
+        if (intervalId === null) intervalId = window.setInterval(refresh, REFRESH_MS);
     }
 
     window.addEventListener('qol_setting_changed', event => {
         if (event.detail?.key !== FEATURE_KEY) return;
-        if (!event.detail.enabled) removeTimers();
+        if (!event.detail.enabled) {
+            removeTimers();
+            setEnabledLayout(false);
+        }
         refresh();
     });
 

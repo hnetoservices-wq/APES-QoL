@@ -1171,10 +1171,13 @@
             const index = Number.parseInt(row.dataset.index, 10);
             const village = lastScanResult.townHalls.villages[index];
             const level = Number.parseInt(row.querySelector('.qol-cp-level-select')?.value || '0', 10);
-            const type = row.querySelector('.qol-cp-type-select')?.value || 'small';
-            const run247 = Boolean(row.querySelector('.qol-cp-247-check')?.checked);
-            const durationSeconds = getCelebrationDurationSeconds(level, type, speed);
-            const reward = level > 0
+            const type = row.querySelector('.qol-cp-type-select')?.value || 'none';
+            const hasCelebration = type === 'small' || type === 'big';
+            const run247 = hasCelebration && Boolean(row.querySelector('.qol-cp-247-check')?.checked);
+            const durationSeconds = hasCelebration
+                ? getCelebrationDurationSeconds(level, type, speed)
+                : null;
+            const reward = level > 0 && hasCelebration
                 ? (type === 'big' ? getBigReward(lastScanResult) : getSmallReward(village))
                 : 0;
 
@@ -1332,16 +1335,21 @@
             const level = Number.parseInt(levelSelect.value || '0', 10);
 
             typeSelect.disabled = level === 0;
-            run247Input.disabled = level === 0;
-            if (level === 0) run247Input.checked = false;
+            if (level === 0) typeSelect.value = 'none';
 
             const bigOption = typeSelect.querySelector('option[value="big"]');
             if (bigOption) bigOption.disabled = level < 10;
-            if (level < 10 && typeSelect.value === 'big') typeSelect.value = 'small';
+            if (level < 10 && typeSelect.value === 'big') typeSelect.value = 'none';
 
-            const type = typeSelect.value || 'small';
-            const duration = getCelebrationDurationSeconds(level, type, speedInfo.speed);
-            const reward = level > 0
+            const type = typeSelect.value || 'none';
+            const hasCelebration = level > 0 && (type === 'small' || type === 'big');
+            run247Input.disabled = !hasCelebration;
+            if (!hasCelebration) run247Input.checked = false;
+
+            const duration = hasCelebration
+                ? getCelebrationDurationSeconds(level, type, speedInfo.speed)
+                : null;
+            const reward = hasCelebration
                 ? (type === 'big' ? getBigReward(lastScanResult) : getSmallReward(village))
                 : 0;
 
@@ -1395,14 +1403,6 @@
         return options.join('');
     }
 
-    function getDefaultCelebrationType(village) {
-        const future = village.celebrations || [];
-        if (future.length) return future[future.length - 1].type;
-        const all = village.allCelebrations || [];
-        if (all.length) return all[all.length - 1].type;
-        return 'small';
-    }
-
     function renderPlanner() {
         if (!lastScanResult) return;
         const planner = mountPlannerPanel();
@@ -1412,9 +1412,7 @@
 
         const rows = lastScanResult.townHalls.villages.map((village, index) => {
             const startLevel = village.hasTownHall ? Math.max(1, village.level) : 0;
-            const defaultType = getDefaultCelebrationType(village);
             const bigDisabled = startLevel < 10;
-            const effectiveDefaultType = bigDisabled && defaultType === 'big' ? 'small' : defaultType;
 
             return `
                 <tr class="qol-cp-plan-row" data-index="${index}">
@@ -1422,11 +1420,12 @@
                     <td><select class="qol-cp-plan-select qol-cp-level-select">${buildLevelOptions(village)}</select></td>
                     <td>
                         <select class="qol-cp-plan-select qol-cp-type-select"${startLevel === 0 ? ' disabled' : ''}>
-                            <option value="small"${effectiveDefaultType === 'small' ? ' selected' : ''}>Small</option>
-                            <option value="big"${effectiveDefaultType === 'big' ? ' selected' : ''}${bigDisabled ? ' disabled' : ''}>Big</option>
+                            <option value="none" selected>None</option>
+                            <option value="small">Small</option>
+                            <option value="big"${bigDisabled ? ' disabled' : ''}>Big</option>
                         </select>
                     </td>
-                    <td><input type="checkbox" class="qol-cp-247-check" aria-label="Run celebrations 24/7"${startLevel === 0 ? ' disabled' : ''}></td>
+                    <td><input type="checkbox" class="qol-cp-247-check" aria-label="Run celebrations 24/7" disabled></td>
                     <td class="qol-cp-plan-duration">-</td>
                     <td class="qol-cp-plan-cpday">-</td>
                 </tr>

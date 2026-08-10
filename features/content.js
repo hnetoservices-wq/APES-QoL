@@ -58,7 +58,7 @@ function initializeKeybinds() {
             return;
         }
 
-        // 3. Navigation shortcuts
+        // 3. Navigation/action shortcuts
         const navKeys = [
             'Digit1',
             'Numpad1',
@@ -70,6 +70,7 @@ function initializeKeybinds() {
             'ArrowLeft',
             'KeyE',
             'ArrowRight',
+            'KeyB',
             'KeyT',
             'KeyG',
             'KeyZ',

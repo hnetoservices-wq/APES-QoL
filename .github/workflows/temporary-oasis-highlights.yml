@@ -1,0 +1,152 @@
+name: Temporary Oasis Highlight Patch
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/temporary-oasis-highlights.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  patch-oasis-scanner:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Add 9c and 15c map highlight toggles
+        shell: bash
+        run: |
+          python <<'PY'
+          from pathlib import Path
+
+          path = Path("features/oasisScanner.js")
+          raw = path.read_bytes().decode("utf-8")
+          newline = "\r\n" if "\r\n" in raw else "\n"
+          text = raw.replace("\r\n", "\n")
+
+          def replace_once(label, old, new):
+              global text
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f"{label}: expected exactly 1 match, found {count}")
+              text = text.replace(old, new, 1)
+
+          replace_once(
+              "module comment",
+              " * - Visual Aid Mode marks unscanned and scanned map tiles without automation.\n * - Tag Team Mode divides the shared map into deterministic A-F sections.\n",
+              " * - Visual Aid Mode marks unscanned and scanned map tiles without automation.\n * - Optional 9c/15c highlights tint discovered croppers orange/purple on the map.\n * - Tag Team Mode divides the shared map into deterministic A-F sections.\n",
+          )
+
+          replace_once(
+              "highlight storage keys",
+              "  const VISUAL_AID_STORAGE_KEY = `qol_oasis_visual_aid_${window.location.hostname}`;\n\n  const LEGACY_TINT_STORAGE_KEY = `qol_oasis_tint_${window.location.hostname}`;\n",
+              "  const VISUAL_AID_STORAGE_KEY = `qol_oasis_visual_aid_${window.location.hostname}`;\n\n  const HIGHLIGHT_9C_STORAGE_KEY = `qol_oasis_highlight_9c_${window.location.hostname}`;\n\n  const HIGHLIGHT_15C_STORAGE_KEY = `qol_oasis_highlight_15c_${window.location.hostname}`;\n\n  const LEGACY_TINT_STORAGE_KEY = `qol_oasis_tint_${window.location.hostname}`;\n",
+          )
+
+          replace_once(
+              "highlight state variables",
+              "  let visualAidEnabled = loadVisualAidEnabled();\n\n  let tagTeamConfig = loadTagTeamConfig();\n",
+              "  let visualAidEnabled = loadVisualAidEnabled();\n\n  let highlight9cEnabled = loadCropperHighlightEnabled(HIGHLIGHT_9C_STORAGE_KEY);\n\n  let highlight15cEnabled = loadCropperHighlightEnabled(HIGHLIGHT_15C_STORAGE_KEY);\n\n  let tagTeamConfig = loadTagTeamConfig();\n",
+          )
+
+          replace_once(
+              "highlight helpers",
+              "  function saveVisualAidEnabled() {\n    try {\n      localStorage.setItem(VISUAL_AID_STORAGE_KEY, String(visualAidEnabled));\n    } catch (error) {\n      console.error(\"[APES Oasis Scanner] Failed to save the Visual Aid setting.\", error);\n    }\n  }\n\n  function getDefaultTagTeamConfig() {\n",
+              "  function saveVisualAidEnabled() {\n    try {\n      localStorage.setItem(VISUAL_AID_STORAGE_KEY, String(visualAidEnabled));\n    } catch (error) {\n      console.error(\"[APES Oasis Scanner] Failed to save the Visual Aid setting.\", error);\n    }\n  }\n\n  function loadCropperHighlightEnabled(storageKey) {\n    try {\n      return localStorage.getItem(storageKey) === \"true\";\n    } catch (error) {\n      return false;\n    }\n  }\n\n  function saveCropperHighlightSettings() {\n    try {\n      localStorage.setItem(HIGHLIGHT_9C_STORAGE_KEY, String(highlight9cEnabled));\n      localStorage.setItem(HIGHLIGHT_15C_STORAGE_KEY, String(highlight15cEnabled));\n    } catch (error) {\n      console.error(\"[APES Oasis Scanner] Failed to save cropper highlight settings.\", error);\n    }\n  }\n\n  function updateCropperHighlightButtons() {\n    const button9c = document.getElementById(\"qol-oasis-highlight-9c\");\n    const button15c = document.getElementById(\"qol-oasis-highlight-15c\");\n\n    if (button9c) {\n      button9c.classList.toggle(\"is-active\", highlight9cEnabled);\n      button9c.setAttribute(\"aria-pressed\", String(highlight9cEnabled));\n      button9c.title = highlight9cEnabled\n        ? \"Hide scanned 9c tiles\"\n        : \"Highlight scanned 9c tiles in orange\";\n    }\n\n    if (button15c) {\n      button15c.classList.toggle(\"is-active\", highlight15cEnabled);\n      button15c.setAttribute(\"aria-pressed\", String(highlight15cEnabled));\n      button15c.title = highlight15cEnabled\n        ? \"Hide scanned 15c tiles\"\n        : \"Highlight scanned 15c tiles in purple\";\n    }\n  }\n\n  function toggleCropperHighlight(fieldType) {\n    if (fieldType === \"9c\") {\n      highlight9cEnabled = !highlight9cEnabled;\n    } else if (fieldType === \"15c\") {\n      highlight15cEnabled = !highlight15cEnabled;\n    } else {\n      return;\n    }\n\n    saveCropperHighlightSettings();\n    updateCropperHighlightButtons();\n    scheduleScannedOverlayRender();\n\n    const enabled = fieldType === \"9c\" ? highlight9cEnabled : highlight15cEnabled;\n\n    setStatus(\n      `${fieldType} map highlight ${enabled ? \"enabled\" : \"disabled\"}. ` +\n        \"Scanning remains active.\",\n    );\n  }\n\n  function getDefaultTagTeamConfig() {\n",
+          )
+
+          replace_once(
+              "visual aid off behavior",
+              "    } else {\n      removeScannedTileOverlay();\n\n      setStatus(\"Visual Aid Mode turned off. Scanning remains active.\");\n    }\n  }\n",
+              "    } else {\n      if (highlight9cEnabled || highlight15cEnabled) {\n        scheduleScannedOverlayRender();\n      } else {\n        removeScannedTileOverlay();\n      }\n\n      setStatus(\"Visual Aid Mode turned off. Scanning remains active.\");\n    }\n  }\n",
+          )
+
+          replace_once(
+              "overlay activation condition",
+              "  function ensureScannedTileOverlay() {\n    if (!isEnabled() || !visualAidEnabled || !isMapPage()) {\n",
+              "  function ensureScannedTileOverlay() {\n    if (\n      !isEnabled() ||\n      (!visualAidEnabled && !highlight9cEnabled && !highlight15cEnabled) ||\n      !isMapPage()\n    ) {\n",
+          )
+
+          replace_once(
+              "stored cropper type helper",
+              "  function isVisualAidTileScanned(id) {\n    if (tagTeamConfig.enabled) {\n      return Boolean(tagTeamSession.scannedTiles?.[id]);\n    }\n\n    return Boolean(savedTiles[id] || savedOases[id] || savedCroppers[id]);\n  }\n\n  function renderScannedTileOverlay() {\n",
+              "  function isVisualAidTileScanned(id) {\n    if (tagTeamConfig.enabled) {\n      return Boolean(tagTeamSession.scannedTiles?.[id]);\n    }\n\n    return Boolean(savedTiles[id] || savedOases[id] || savedCroppers[id]);\n  }\n\n  function getStoredCropperType(id) {\n    const cropperType = savedCroppers[id]?.fieldType;\n\n    if (cropperType === \"9c\" || cropperType === \"15c\") {\n      return cropperType;\n    }\n\n    const tile = savedTiles[id];\n\n    if (tile?.fieldType === \"9c\" || tile?.fieldType === \"15c\") {\n      return tile.fieldType;\n    }\n\n    return getCropperType(tile?.distribution);\n  }\n\n  function renderScannedTileOverlay() {\n",
+          )
+
+          replace_once(
+              "overlay cropper detection",
+              "        const id = `${x}|${y}`;\n\n        const scanned = isVisualAidTileScanned(id);\n\n        const tile = document.createElement(\"span\");\n\n        tile.className = \"qol-oasis-visual-tile \" + (scanned ? \"is-scanned\" : \"is-unscanned\");\n\n        if (tagTeamConfig.enabled) {\n",
+              "        const id = `${x}|${y}`;\n\n        const cropperType = getStoredCropperType(id);\n\n        const highlight9c = highlight9cEnabled && cropperType === \"9c\";\n        const highlight15c = highlight15cEnabled && cropperType === \"15c\";\n\n        if (!visualAidEnabled && !highlight9c && !highlight15c) {\n          continue;\n        }\n\n        const scanned = isVisualAidTileScanned(id);\n\n        const tile = document.createElement(\"span\");\n\n        tile.className = \"qol-oasis-visual-tile\";\n\n        if (visualAidEnabled) {\n          tile.classList.add(scanned ? \"is-scanned\" : \"is-unscanned\");\n        }\n\n        if (tagTeamConfig.enabled) {\n",
+          )
+
+          replace_once(
+              "overlay highlight classes",
+              "        }\n\n        tile.style.left = `${left}px`;\n\n        tile.style.top = `${top}px`;\n",
+              "        }\n\n        if (highlight9c) {\n          tile.classList.add(\"is-highlight-9c\");\n        }\n\n        if (highlight15c) {\n          tile.classList.add(\"is-highlight-15c\");\n        }\n\n        tile.style.left = `${left}px`;\n\n        tile.style.top = `${top}px`;\n",
+          )
+
+          replace_once(
+              "tile highlight css",
+              "      .qol-tag-team-tile.is-section-edge {\n        box-shadow:\n          inset 0 0 0 2px\n          rgba(255, 255, 255, 0.42)\n          !important;\n      }\n\n      #qol-oasis-toggle-btn {\n",
+              "      .qol-tag-team-tile.is-section-edge {\n        box-shadow:\n          inset 0 0 0 2px\n          rgba(255, 255, 255, 0.42)\n          !important;\n      }\n\n      .qol-oasis-visual-tile.is-highlight-9c {\n        background:\n          rgba(242, 142, 43, 0.62)\n          !important;\n        filter:\n          none\n          !important;\n        opacity:\n          1\n          !important;\n        box-shadow:\n          inset 0 0 0 1px\n          rgba(125, 70, 10, 0.58)\n          !important;\n      }\n\n      .qol-oasis-visual-tile.is-highlight-15c {\n        background:\n          rgba(143, 99, 199, 0.64)\n          !important;\n        filter:\n          none\n          !important;\n        opacity:\n          1\n          !important;\n        box-shadow:\n          inset 0 0 0 1px\n          rgba(75, 43, 118, 0.62)\n          !important;\n      }\n\n      #qol-oasis-toggle-btn {\n",
+          )
+
+          replace_once(
+              "controls grid columns",
+              "        grid-template-columns:\n          minmax(120px, 145px)\n          minmax(115px, 140px)\n          minmax(160px, 1fr)\n          minmax(115px, 140px)\n          auto\n          auto\n          auto\n          auto\n          !important;\n",
+              "        grid-template-columns:\n          minmax(105px, 1fr)\n          minmax(105px, 1fr)\n          minmax(130px, 1.3fr)\n          minmax(100px, 1fr)\n          auto\n          auto\n          auto\n          auto\n          auto\n          auto\n          !important;\n",
+          )
+
+          replace_once(
+              "highlight button css",
+              "      .qol-oasis-action-btn.visual-aid-toggle:hover,\n      #qol-tag-team-toggle:hover {\n",
+              "      .qol-oasis-action-btn.cropper-highlight-toggle {\n        min-width:\n          84px\n          !important;\n        background:\n          linear-gradient(\n            to bottom,\n            #666,\n            #444\n          )\n          !important;\n        border-color:\n          #333\n          !important;\n      }\n\n      .qol-oasis-action-btn.cropper-highlight-toggle.highlight-9c.is-active {\n        background:\n          linear-gradient(\n            to bottom,\n            #f2a23f,\n            #c97316\n          )\n          !important;\n        border-color:\n          #9b570e\n          !important;\n      }\n\n      .qol-oasis-action-btn.cropper-highlight-toggle.highlight-15c.is-active {\n        background:\n          linear-gradient(\n            to bottom,\n            #9c73cf,\n            #69439b\n          )\n          !important;\n        border-color:\n          #503076\n          !important;\n      }\n\n      .qol-oasis-action-btn.visual-aid-toggle:hover,\n      .qol-oasis-action-btn.cropper-highlight-toggle:hover,\n      #qol-tag-team-toggle:hover {\n",
+          )
+
+          replace_once(
+              "panel description",
+              "          Visual Aid Mode shows unscanned tiles in blue and\n          scanned tiles in red. Tag Team Mode divides the\n",
+              "          Visual Aid Mode shows unscanned tiles in blue and\n          scanned tiles in red. Highlight 9c marks discovered 9c tiles\n          orange, while Highlight 15c marks discovered 15c tiles purple.\n          Tag Team Mode divides the\n",
+          )
+
+          replace_once(
+              "highlight buttons html",
+              "          <div\n            id=\"qol-oasis-copy\"\n            class=\"qol-oasis-action-btn\"\n          >\n            Copy\n          </div>\n",
+              "          <div\n            id=\"qol-oasis-highlight-9c\"\n            class=\"qol-oasis-action-btn cropper-highlight-toggle highlight-9c\"\n            role=\"button\"\n            tabindex=\"0\"\n            aria-pressed=\"false\"\n            title=\"Highlight scanned 9c tiles in orange\"\n          >\n            Highlight 9c\n          </div>\n\n          <div\n            id=\"qol-oasis-highlight-15c\"\n            class=\"qol-oasis-action-btn cropper-highlight-toggle highlight-15c\"\n            role=\"button\"\n            tabindex=\"0\"\n            aria-pressed=\"false\"\n            title=\"Highlight scanned 15c tiles in purple\"\n          >\n            Highlight 15c\n          </div>\n\n          <div\n            id=\"qol-oasis-copy\"\n            class=\"qol-oasis-action-btn\"\n          >\n            Copy\n          </div>\n",
+          )
+
+          replace_once(
+              "highlight button listeners",
+              "    oasisContainer\n      .querySelector(\"#qol-tag-team-toggle\")\n      .addEventListener(\"click\", toggleTagTeamMode);\n",
+              "    const bindCropperHighlightButton = (selector, fieldType) => {\n      const button = oasisContainer.querySelector(selector);\n\n      button.addEventListener(\"click\", () => toggleCropperHighlight(fieldType));\n\n      button.addEventListener(\"keydown\", (event) => {\n        if (event.key !== \"Enter\" && event.key !== \" \") {\n          return;\n        }\n\n        event.preventDefault();\n        toggleCropperHighlight(fieldType);\n      });\n    };\n\n    bindCropperHighlightButton(\"#qol-oasis-highlight-9c\", \"9c\");\n    bindCropperHighlightButton(\"#qol-oasis-highlight-15c\", \"15c\");\n\n    oasisContainer\n      .querySelector(\"#qol-tag-team-toggle\")\n      .addEventListener(\"click\", toggleTagTeamMode);\n",
+          )
+
+          replace_once(
+              "button initial state",
+              "    updateVisualAidToggleButton();\n    updateTagTeamUI();\n    renderResultsTable();\n",
+              "    updateVisualAidToggleButton();\n    updateCropperHighlightButtons();\n    updateTagTeamUI();\n    renderResultsTable();\n",
+          )
+
+          replace_once(
+              "reload highlight state",
+              "    visualAidEnabled = loadVisualAidEnabled();\n\n    tagTeamConfig = loadTagTeamConfig();\n",
+              "    visualAidEnabled = loadVisualAidEnabled();\n\n    highlight9cEnabled = loadCropperHighlightEnabled(HIGHLIGHT_9C_STORAGE_KEY);\n\n    highlight15cEnabled = loadCropperHighlightEnabled(HIGHLIGHT_15C_STORAGE_KEY);\n\n    tagTeamConfig = loadTagTeamConfig();\n",
+          )
+
+          output = text if newline == "\n" else text.replace("\n", newline)
+          path.write_bytes(output.encode("utf-8"))
+          PY
+
+          git config user.name "APES QoL Bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add features/oasisScanner.js
+
+          if git diff --cached --quiet; then
+            echo "No oasisScanner.js changes were required."
+            exit 0
+          fi
+
+          git commit -m "Add 9c and 15c cropper highlights"
+          git push

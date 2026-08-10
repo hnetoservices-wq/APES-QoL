@@ -1,87 +1,48 @@
 /**
  * Travian QoL Extension
- * Module: Page Navigation Keys (1-3, Q/E, Arrows, T/G, Z, X, C, F, V)
+ * Module: Page Navigation Keys (1-3, Q/E, Arrows, B, T/G, Z, X, C, F, V)
  * with Toggle Close & Action Triggers
  */
 
-/**
- * Appends or updates route parameters cleanly without breaking structural order.
- */
 function navigateToRoute(routeParam) {
     let currentHash = window.location.hash;
-
-    if (!currentHash.startsWith('#/')) {
-        currentHash = '#/';
-    }
+    if (!currentHash.startsWith('#/')) currentHash = '#/';
 
     let parts = currentHash.substring(2).split('/').filter(Boolean);
     const [targetKey] = routeParam.split(':');
 
-    // Drop subtabs when injecting a primary tab to prevent router collisions.
     if (targetKey === 'tab') {
         parts = parts.filter(part => !part.startsWith('subtab:'));
     } else if (targetKey === 'subtab') {
         parts = parts.filter(part => !part.startsWith('tab:'));
     }
 
-    const existingIndex = parts.findIndex(part => {
-        return part.startsWith(`${targetKey}:`);
-    });
-
-    if (existingIndex !== -1) {
-        parts[existingIndex] = routeParam;
-    } else {
-        parts.push(routeParam);
-    }
+    const existingIndex = parts.findIndex(part => part.startsWith(`${targetKey}:`));
+    if (existingIndex !== -1) parts[existingIndex] = routeParam;
+    else parts.push(routeParam);
 
     window.location.hash = `#/${parts.filter(Boolean).join('/')}`;
 }
 
-/**
- * Opens a village window using one atomic hash update.
- * Travian's router is sensitive to parameter order and several rapid
- * consecutive hash changes, so the destination is assembled first.
- */
-function openVillageWindow(
-    windowName,
-    beforeWindowParams = [],
-    afterWindowParams = []
-) {
+function openVillageWindow(windowName, beforeWindowParams = [], afterWindowParams = []) {
     const currentParts = window.location.hash.startsWith('#/')
         ? window.location.hash.substring(2).split('/').filter(Boolean)
         : [];
 
-    const villageIdPart = currentParts.find(part => {
-        return part.startsWith('villId:');
-    });
-
+    const villageIdPart = currentParts.find(part => part.startsWith('villId:'));
     const nextParts = ['page:village'];
 
-    if (villageIdPart) {
-        nextParts.push(villageIdPart);
-    }
+    if (villageIdPart) nextParts.push(villageIdPart);
 
-    nextParts.push(
-        ...beforeWindowParams,
-        `window:${windowName}`,
-        ...afterWindowParams
-    );
-
+    nextParts.push(...beforeWindowParams, `window:${windowName}`, ...afterWindowParams);
     window.location.hash = `#/${nextParts.join('/')}`;
 }
 
-/**
- * Strips a specific window parameter from the URL hash.
- */
 function removeRouteParam(targetWindowName) {
     let currentHash = window.location.hash;
-
-    if (!currentHash.startsWith('#/')) {
-        return;
-    }
+    if (!currentHash.startsWith('#/')) return;
 
     let parts = currentHash.substring(2).split('/');
-
     parts = parts.filter(part => {
         return part !== `window:${targetWindowName}` &&
             !part.startsWith('location:') &&
@@ -94,16 +55,9 @@ function removeRouteParam(targetWindowName) {
     window.location.hash = `#/${parts.filter(Boolean).join('/')}`;
 }
 
-/**
- * Simulates a native mouse click on an element and its children
- * to force framework event listeners such as AngularJS to trigger.
- */
 function clickSidebarElement(elementId) {
     const element = document.getElementById(elementId);
-
-    if (!element) {
-        return;
-    }
+    if (!element) return;
 
     element.dispatchEvent(new MouseEvent('click', {
         view: window,
@@ -112,7 +66,6 @@ function clickSidebarElement(elementId) {
     }));
 
     const icon = element.querySelector('i');
-
     if (icon) {
         icon.dispatchEvent(new MouseEvent('click', {
             view: window,
@@ -122,9 +75,6 @@ function clickSidebarElement(elementId) {
     }
 }
 
-/**
- * Changes village through Travian's native previous/next village controls.
- */
 function changeVillage(direction) {
     const navigationButtons = Array.from(document.querySelectorAll(
         `#villageList .navigation.${direction}`
@@ -133,7 +83,6 @@ function changeVillage(direction) {
     const navigationButton = navigationButtons.find(button => {
         const style = window.getComputedStyle(button);
         const bounds = button.getBoundingClientRect();
-
         return style.display !== 'none' &&
             style.visibility !== 'hidden' &&
             bounds.width > 0 &&
@@ -146,7 +95,6 @@ function changeVillage(direction) {
     }
 
     const bounds = navigationButton.getBoundingClientRect();
-
     const eventOptions = {
         view: window,
         bubbles: true,
@@ -164,7 +112,6 @@ function changeVillage(direction) {
             pointerType: 'mouse',
             isPrimary: true
         }));
-
         navigationButton.dispatchEvent(new PointerEvent('pointerdown', {
             ...eventOptions,
             buttons: 1,
@@ -174,10 +121,7 @@ function changeVillage(direction) {
         }));
     }
 
-    navigationButton.dispatchEvent(
-        new MouseEvent('mouseover', eventOptions)
-    );
-
+    navigationButton.dispatchEvent(new MouseEvent('mouseover', eventOptions));
     navigationButton.dispatchEvent(new MouseEvent('mousedown', {
         ...eventOptions,
         buttons: 1
@@ -193,52 +137,269 @@ function changeVillage(direction) {
         }));
     }
 
-    navigationButton.dispatchEvent(
-        new MouseEvent('mouseup', eventOptions)
-    );
-
-    navigationButton.dispatchEvent(
-        new MouseEvent('click', eventOptions)
-    );
+    navigationButton.dispatchEvent(new MouseEvent('mouseup', eventOptions));
+    navigationButton.dispatchEvent(new MouseEvent('click', eventOptions));
 }
 
-/**
- * Tracks modifier keys even when the outer listener only passes
- * a string code to handleNavigation.
- */
+function isVisibleNavigationTarget(element) {
+    if (!element?.isConnected) return false;
+    const style = window.getComputedStyle(element);
+    const bounds = element.getBoundingClientRect();
+    return style.display !== 'none' &&
+        style.visibility !== 'hidden' &&
+        Number.parseFloat(style.opacity || '1') > 0 &&
+        bounds.width > 0 &&
+        bounds.height > 0;
+}
+
+function getNavigationPointerOptions(element) {
+    const bounds = element.getBoundingClientRect();
+    return {
+        view: window,
+        bubbles: true,
+        cancelable: true,
+        composed: true,
+        button: 0,
+        clientX: bounds.left + (bounds.width / 2),
+        clientY: bounds.top + (bounds.height / 2)
+    };
+}
+
+function revealActiveBuildingQueueDetails(slot) {
+    const options = getNavigationPointerOptions(slot);
+
+    if (typeof PointerEvent === 'function') {
+        slot.dispatchEvent(new PointerEvent('pointerover', {
+            ...options,
+            pointerId: 1,
+            pointerType: 'mouse',
+            isPrimary: true
+        }));
+    }
+
+    slot.dispatchEvent(new MouseEvent('mouseover', options));
+    slot.dispatchEvent(new MouseEvent('mousemove', options));
+}
+
+function findActiveBuildingQueueSlot() {
+    const selectors = [
+        '.queueContainer.usedSlot.queueType1',
+        '.queueContainer.usedSlot'
+    ];
+
+    for (const selector of selectors) {
+        const visibleSlot = Array.from(document.querySelectorAll(selector))
+            .find(isVisibleNavigationTarget);
+        if (visibleSlot) return visibleSlot;
+    }
+
+    return null;
+}
+
+function describeInstantFinishCandidate(element) {
+    const values = [
+        element.id,
+        element.className,
+        element.textContent,
+        element.getAttribute('title'),
+        element.getAttribute('tooltip'),
+        element.getAttribute('tooltip-translate'),
+        element.getAttribute('aria-label'),
+        element.getAttribute('clickable'),
+        element.getAttribute('ng-click'),
+        element.getAttribute('on-click'),
+        element.getAttribute('on-pointer-up'),
+        element.getAttribute('on-pointer-down')
+    ];
+
+    const child = element.querySelector?.('i,img,span');
+    if (child) {
+        values.push(
+            child.id,
+            child.className,
+            child.getAttribute?.('title'),
+            child.getAttribute?.('tooltip'),
+            child.getAttribute?.('tooltip-translate'),
+            child.getAttribute?.('aria-label')
+        );
+    }
+
+    return values.filter(Boolean).map(String).join(' ').replace(/\s+/g, ' ').trim();
+}
+
+function scoreInstantFinishCandidate(element, slotBounds) {
+    if (!isVisibleNavigationTarget(element)) return -10000;
+
+    const bounds = element.getBoundingClientRect();
+    const description = describeInstantFinishCandidate(element).toLowerCase();
+    let score = 0;
+
+    if (/(instant|finish|complete|finishnow|instantfinish|completenow|speedup|speed-up)/i.test(description)) score += 140;
+    if (/(gold|masterbuilder|master builder)/i.test(description)) score += 35;
+    if (/(construction|building|build)/i.test(description)) score += 15;
+    if (/(cancel|abort|remove|delete|destroy|stop|close|dismiss)/i.test(description)) score -= 220;
+    if (/(symbol_x|icon_x|closebutton|cancelbutton)/i.test(description)) score -= 220;
+
+    if (bounds.width >= 18 && bounds.width <= 60 && bounds.height >= 18 && bounds.height <= 60) {
+        score += 18;
+    }
+    if (bounds.left >= slotBounds.left + (slotBounds.width * 0.55)) score += 28;
+
+    return score;
+}
+
+function findInstantFinishButton(slot) {
+    const scope = slot.closest('[ng-include]') ||
+        slot.closest('.buildingQueue') ||
+        slot.parentElement ||
+        document.body;
+
+    const selector = [
+        '[clickable]',
+        '[ng-click]',
+        '[on-click]',
+        '[on-pointer-up]',
+        '[on-pointer-down]',
+        'button',
+        'a',
+        '[role="button"]'
+    ].join(',');
+
+    const slotBounds = slot.getBoundingClientRect();
+    const candidates = Array.from(scope.querySelectorAll(selector))
+        .filter(element => element !== slot)
+        .map(element => ({
+            element,
+            score: scoreInstantFinishCandidate(element, slotBounds),
+            description: describeInstantFinishCandidate(element)
+        }))
+        .filter(candidate => candidate.score > -100)
+        .sort((a, b) => b.score - a.score);
+
+    const semanticMatch = candidates.find(candidate => candidate.score >= 100);
+    if (semanticMatch) return semanticMatch.element;
+
+    const positionalMatch = candidates.find(candidate => {
+        const bounds = candidate.element.getBoundingClientRect();
+        const description = candidate.description.toLowerCase();
+        return candidate.score >= 35 &&
+            bounds.left >= slotBounds.left + (slotBounds.width * 0.55) &&
+            !/(cancel|abort|remove|delete|destroy|stop|close|dismiss|symbol_x|icon_x)/i.test(description);
+    });
+
+    if (positionalMatch) return positionalMatch.element;
+
+    console.warn('[APES Instant Finish] Instant-finish button could not be identified safely.');
+    console.table(candidates.slice(0, 12).map(candidate => {
+        const bounds = candidate.element.getBoundingClientRect();
+        return {
+            score: candidate.score,
+            description: candidate.description,
+            tag: candidate.element.tagName,
+            left: Math.round(bounds.left),
+            top: Math.round(bounds.top),
+            width: Math.round(bounds.width),
+            height: Math.round(bounds.height)
+        };
+    }));
+
+    return null;
+}
+
+function clickInstantFinishButton(button) {
+    const options = getNavigationPointerOptions(button);
+
+    if (typeof PointerEvent === 'function') {
+        button.dispatchEvent(new PointerEvent('pointerdown', {
+            ...options,
+            buttons: 1,
+            pointerId: 1,
+            pointerType: 'mouse',
+            isPrimary: true
+        }));
+    }
+
+    button.dispatchEvent(new MouseEvent('mousedown', {
+        ...options,
+        buttons: 1
+    }));
+
+    if (typeof PointerEvent === 'function') {
+        button.dispatchEvent(new PointerEvent('pointerup', {
+            ...options,
+            buttons: 0,
+            pointerId: 1,
+            pointerType: 'mouse',
+            isPrimary: true
+        }));
+    }
+
+    button.dispatchEvent(new MouseEvent('mouseup', options));
+    button.dispatchEvent(new MouseEvent('click', options));
+}
+
+async function triggerInstantFinishBuildingQueue() {
+    const slot = findActiveBuildingQueueSlot();
+    if (!slot) {
+        console.warn('[APES Instant Finish] No active building queue slot found.');
+        return;
+    }
+
+    revealActiveBuildingQueueDetails(slot);
+    await new Promise(resolve => window.setTimeout(resolve, 80));
+
+    const button = findInstantFinishButton(slot);
+    if (button) clickInstantFinishButton(button);
+}
+
 let modifiersActive = false;
 
 window.addEventListener('keydown', (event) => {
-    modifiersActive = (
-        event.ctrlKey ||
-        event.altKey ||
-        event.metaKey ||
-        event.shiftKey
-    );
+    modifiersActive = event.ctrlKey || event.altKey || event.metaKey || event.shiftKey;
 }, true);
 
 window.addEventListener('keyup', (event) => {
-    modifiersActive = (
-        event.ctrlKey ||
-        event.altKey ||
-        event.metaKey ||
-        event.shiftKey
-    );
+    modifiersActive = event.ctrlKey || event.altKey || event.metaKey || event.shiftKey;
 }, true);
 
-/**
- * Checks if a specific key action is enabled.
- * Defaults to true if the setting does not exist yet.
- */
 function isKeybindEnabled(actionKey) {
     const setting = localStorage.getItem(`qol_keybind_${actionKey}`);
-
     return setting !== 'false';
 }
 
-/**
- * Maps keys to game destinations with toggle-close logic.
- */
+function ensureInstantFinishKeybindMenuEntry() {
+    const grid = document.querySelector('#qol-modal .qol-keybind-grid');
+    if (!grid || document.getElementById('qol-keybind-instant-finish')) return;
+
+    const row = document.createElement('div');
+    row.id = 'qol-keybind-instant-finish';
+    row.className = 'qol-keybind-item';
+    row.innerHTML = `
+        <div class="qol-key-combo"><span class="qol-kbd">B</span></div>
+        <span class="qol-keybind-action">Instant Finish Building Queue</span>
+        <label class="qol-switch" title="Toggle Instant Finish Building Queue shortcut">
+            <input type="checkbox" id="qol-chk-instant-finish" class="qol-checkbox">
+            <span class="qol-switch-track" aria-hidden="true"></span>
+            <span class="qol-visually-hidden">Toggle Instant Finish Building Queue shortcut</span>
+        </label>
+    `;
+
+    grid.appendChild(row);
+
+    const checkbox = row.querySelector('#qol-chk-instant-finish');
+    checkbox.checked = isKeybindEnabled('instantFinish');
+    checkbox.addEventListener('change', event => {
+        try {
+            localStorage.setItem('qol_keybind_instantFinish', String(Boolean(event.target.checked)));
+        } catch (error) {
+            console.warn('[APES Instant Finish] Could not save keybind setting.', error);
+        }
+    });
+
+    const count = document.querySelector('#qol-modal .qol-keybind-heading .qol-section-count');
+    if (count) count.textContent = `${grid.querySelectorAll('.qol-keybind-item').length} shortcuts`;
+}
+
 function handleNavigation(code) {
     const legacyModifierEvent = window.event;
 
@@ -261,27 +422,11 @@ function handleNavigation(code) {
 
     if (activeElement) {
         const tagName = activeElement.tagName.toUpperCase();
-
-        if (
-            tagName === 'INPUT' ||
-            tagName === 'TEXTAREA' ||
-            tagName === 'SELECT'
-        ) {
-            return;
-        }
-
-        if (
-            activeElement.isContentEditable ||
-            activeElement.getAttribute('contenteditable') === 'true'
-        ) {
-            return;
-        }
+        if (tagName === 'INPUT' || tagName === 'TEXTAREA' || tagName === 'SELECT') return;
+        if (activeElement.isContentEditable || activeElement.getAttribute('contenteditable') === 'true') return;
 
         const role = activeElement.getAttribute('role');
-
-        if (role === 'textbox' || role === 'searchbox') {
-            return;
-        }
+        if (role === 'textbox' || role === 'searchbox') return;
 
         if (
             activeElement.closest('.chat') ||
@@ -295,47 +440,37 @@ function handleNavigation(code) {
     const currentHash = window.location.hash;
 
     switch (code) {
-        // 1: Village Center
         case 'Digit1':
         case 'Numpad1':
-            if (isKeybindEnabled('village')) {
-                window.location.hash = '#/page:village';
-            }
+            if (isKeybindEnabled('village')) window.location.hash = '#/page:village';
             break;
 
-        // 2: Resources
         case 'Digit2':
         case 'Numpad2':
-            if (isKeybindEnabled('resources')) {
-                window.location.hash = '#/page:resources';
-            }
+            if (isKeybindEnabled('resources')) window.location.hash = '#/page:resources';
             break;
 
-        // 3: World Map
         case 'Digit3':
         case 'Numpad3':
-            if (isKeybindEnabled('map')) {
-                window.location.hash = '#/page:map';
-            }
+            if (isKeybindEnabled('map')) window.location.hash = '#/page:map';
             break;
 
-        // Q / Left Arrow: Previous Village
         case 'KeyQ':
         case 'ArrowLeft':
-            if (isKeybindEnabled('previousVillage')) {
-                changeVillage('previous');
-            }
+            if (isKeybindEnabled('previousVillage')) changeVillage('previous');
             break;
 
-        // E / Right Arrow: Next Village
         case 'KeyE':
         case 'ArrowRight':
-            if (isKeybindEnabled('nextVillage')) {
-                changeVillage('next');
+            if (isKeybindEnabled('nextVillage')) changeVillage('next');
+            break;
+
+        case 'KeyB':
+            if (isKeybindEnabled('instantFinish')) {
+                void triggerInstantFinishBuildingQueue();
             }
             break;
 
-        // T: Rally Point Overview
         case 'KeyT':
             if (isKeybindEnabled('rallyPoint')) {
                 const rallyPointIsOpen =
@@ -348,72 +483,52 @@ function handleNavigation(code) {
                 } else {
                     const cpMatch = currentHash.match(/cp:([^/]+)/);
                     const activeCp = cpMatch ? cpMatch[1] : '1';
-
-                    openVillageWindow(
-                        'building',
-                        ['location:32'],
-                        [`cp:${activeCp}`]
-                    );
+                    openVillageWindow('building', ['location:32'], [`cp:${activeCp}`]);
                 }
             }
             break;
 
-        // G: Hero Inventory
         case 'KeyG':
             if (isKeybindEnabled('heroInventory')) {
                 const inventoryIsOpen =
                     currentHash.includes('window:hero') &&
                     currentHash.includes('herotab:Inventory');
 
-                if (inventoryIsOpen) {
-                    removeRouteParam('hero');
-                } else {
-                    openVillageWindow(
-                        'hero',
-                        [],
-                        ['herotab:Inventory']
-                    );
-                }
+                if (inventoryIsOpen) removeRouteParam('hero');
+                else openVillageWindow('hero', [], ['herotab:Inventory']);
             }
             break;
 
-        // Z: Conversations
         case 'KeyZ':
             if (isKeybindEnabled('conversations')) {
-                if (currentHash.includes('window:igm')) {
-                    removeRouteParam('igm');
-                } else {
+                if (currentHash.includes('window:igm')) removeRouteParam('igm');
+                else {
                     navigateToRoute('window:igm');
                     clickSidebarElement('jsQuestButtonIgm');
                 }
             }
             break;
 
-        // X: Statistics
         case 'KeyX':
             if (isKeybindEnabled('statistics')) {
-                if (currentHash.includes('window:statistics')) {
-                    removeRouteParam('statistics');
-                } else {
+                if (currentHash.includes('window:statistics')) removeRouteParam('statistics');
+                else {
                     navigateToRoute('window:statistics');
                     clickSidebarElement('jsQuestButtonStatistics');
                 }
             }
             break;
 
-        // C: Quest Book
         case 'KeyC':
             if (isKeybindEnabled('questBook')) {
-                if (currentHash.includes('window:questBook')) {
-                    removeRouteParam('questBook');
-                } else {
+                if (currentHash.includes('window:questBook')) removeRouteParam('questBook');
+                else {
                     navigateToRoute('window:questBook');
                     clickSidebarElement('jsQuestButtonQuestbook');
                 }
             }
             break;
 
-        // F: Reports
         case 'KeyF':
             if (isKeybindEnabled('reports')) {
                 if (currentHash.includes('window:reports')) {
@@ -421,22 +536,20 @@ function handleNavigation(code) {
                 } else {
                     const cpMatch = currentHash.match(/cp:([^/]+)/);
                     const activeCp = cpMatch ? cpMatch[1] : '1';
-
                     navigateToRoute(`cp:${activeCp}`);
                     navigateToRoute('window:reports');
                 }
             }
             break;
 
-        // V: Villages Overview
         case 'KeyV':
             if (isKeybindEnabled('villagesOverview')) {
-                if (currentHash.includes('window:villagesOverview')) {
-                    removeRouteParam('villagesOverview');
-                } else {
-                    navigateToRoute('window:villagesOverview');
-                }
+                if (currentHash.includes('window:villagesOverview')) removeRouteParam('villagesOverview');
+                else navigateToRoute('window:villagesOverview');
             }
             break;
     }
 }
+
+ensureInstantFinishKeybindMenuEntry();
+window.setInterval(ensureInstantFinishKeybindMenuEntry, 1200);

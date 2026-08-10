@@ -13,7 +13,6 @@
     const FEATURE_KEY = 'resourceCapacityTimer';
     const STYLE_ID = 'qol-resource-capacity-timer-styles';
     const TIMER_CLASS = 'qol-resource-capacity-eta';
-    const ENABLED_BODY_CLASS = 'qol-resource-capacity-timer-enabled';
     const REFRESH_MS = 1000;
 
     const RESOURCES = [
@@ -118,10 +117,14 @@
         const style = document.createElement('style');
         style.id = STYLE_ID;
         style.textContent = `
+            /*
+             * Keep the extra line inside Travian's existing resource HUD
+             * footprint. We deliberately do not move or restyle
+             * #tileInformation; map tooltip positioning remains game-native.
+             */
             #resourceBar .production:has(.${TIMER_CLASS}) {
-                min-height: 32px !important;
-                padding-top: 2px !important;
-                padding-bottom: 3px !important;
+                min-height: 27px !important;
+                padding: 1px 0 2px !important;
                 box-sizing: border-box !important;
             }
 
@@ -130,8 +133,9 @@
                 flex-direction: column !important;
                 align-items: center !important;
                 justify-content: center !important;
-                gap: 1px !important;
-                min-height: 27px !important;
+                gap: 0 !important;
+                min-height: 24px !important;
+                line-height: 11px !important;
             }
 
             #resourceBar .${TIMER_CLASS} {
@@ -143,24 +147,12 @@
                 font-size: inherit !important;
                 font-weight: inherit !important;
                 font-style: inherit !important;
-                line-height: inherit !important;
+                line-height: 11px !important;
                 letter-spacing: inherit !important;
                 color: inherit !important;
                 text-align: center !important;
                 white-space: nowrap !important;
                 pointer-events: none !important;
-            }
-
-            /*
-             * The tile tooltip has attached absolutely-positioned elements
-             * such as movement countdowns. A margin changes the tooltip's
-             * layout box without necessarily moving those attachments with it.
-             * `translate` moves the complete rendered tooltip as one unit while
-             * preserving Travian's own top/left positioning and centering.
-             */
-            body.${ENABLED_BODY_CLASS} #tileInformation {
-                margin-top: 0 !important;
-                translate: 0 14px !important;
             }
         `;
         document.head.appendChild(style);
@@ -168,10 +160,6 @@
 
     function removeTimers() {
         document.querySelectorAll(`#resourceBar .${TIMER_CLASS}`).forEach(element => element.remove());
-    }
-
-    function setEnabledLayout(enabled) {
-        document.body?.classList.toggle(ENABLED_BODY_CLASS, Boolean(enabled));
     }
 
     function readResource(resource) {
@@ -269,10 +257,7 @@
     }
 
     function refresh() {
-        const enabled = isEnabled();
-        setEnabledLayout(enabled);
-
-        if (!enabled) {
+        if (!isEnabled()) {
             removeTimers();
             return;
         }
@@ -294,10 +279,7 @@
 
     window.addEventListener('qol_setting_changed', event => {
         if (event.detail?.key !== FEATURE_KEY) return;
-        if (!event.detail.enabled) {
-            removeTimers();
-            setEnabledLayout(false);
-        }
+        if (!event.detail.enabled) removeTimers();
         refresh();
     });
 

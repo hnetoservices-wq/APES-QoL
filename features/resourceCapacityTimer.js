@@ -11,7 +11,6 @@
     'use strict';
 
     const FEATURE_KEY = 'resourceCapacityTimer';
-    const MENU_CHECKBOX_ID = 'qol-chk-resource-capacity-timer';
     const STYLE_ID = 'qol-resource-capacity-timer-styles';
     const TIMER_CLASS = 'qol-resource-capacity-eta';
     const REFRESH_MS = 1000;
@@ -107,13 +106,14 @@
             #resourceBar .${TIMER_CLASS} {
                 display: inline !important;
                 margin-left: 4px !important;
-                font-family: Arial, Helvetica, sans-serif !important;
-                font-size: 8px !important;
-                font-weight: normal !important;
+                font-family: inherit !important;
+                font-size: inherit !important;
+                font-weight: inherit !important;
+                font-style: inherit !important;
                 line-height: inherit !important;
+                letter-spacing: inherit !important;
                 white-space: nowrap !important;
                 vertical-align: baseline !important;
-                text-shadow: none !important;
                 pointer-events: none !important;
             }
 
@@ -246,77 +246,11 @@
         });
     }
 
-    function updateBasicFeatureCount(grid) {
-        const heading = grid?.previousElementSibling;
-        const count = heading?.querySelector('.qol-section-count');
-        if (!count) return;
-
-        const total = grid.querySelectorAll(':scope > .qol-feature-card').length;
-        count.textContent = `${total} tools`;
-    }
-
-    function setFeatureEnabled(enabled) {
-        try {
-            localStorage.setItem(`qol_${FEATURE_KEY}`, String(enabled));
-        } catch (error) {
-            console.warn('[APES Resource Capacity Timer] Could not save feature setting:', error);
-        }
-
-        window.dispatchEvent(new CustomEvent('qol_setting_changed', {
-            detail: { key: FEATURE_KEY, enabled }
-        }));
-    }
-
-    function ensureMenuIntegration() {
-        const grid = document.querySelector('#qol-basic-feature-grid');
-        if (!grid) return;
-
-        try {
-            if (typeof QOL_PREFERENCE_STORAGE_KEYS !== 'undefined') {
-                QOL_PREFERENCE_STORAGE_KEYS.add(`qol_${FEATURE_KEY}`);
-            }
-        } catch (_) {}
-
-        let checkbox = grid.querySelector(`#${MENU_CHECKBOX_ID}`);
-        if (!checkbox) {
-            const card = document.createElement('article');
-            card.className = 'qol-feature-card';
-            card.dataset.featureKey = FEATURE_KEY;
-            card.innerHTML = `
-                <span class="qol-feature-icon" aria-hidden="true">⏱</span>
-                <div class="qol-feature-copy">
-                    <h3 class="qol-feature-name">Resource Capacity Timer</h3>
-                    <p class="qol-feature-desc">Shows how long current production will take to fill storage, or how long negative production will take to empty it.</p>
-                </div>
-                <label class="qol-switch" title="Toggle Resource Capacity Timer">
-                    <input type="checkbox" id="${MENU_CHECKBOX_ID}" class="qol-checkbox">
-                    <span class="qol-switch-track" aria-hidden="true"></span>
-                    <span class="qol-visually-hidden">Toggle Resource Capacity Timer</span>
-                </label>
-            `;
-            grid.appendChild(card);
-            checkbox = card.querySelector(`#${MENU_CHECKBOX_ID}`);
-            updateBasicFeatureCount(grid);
-        }
-
-        checkbox.checked = isEnabled();
-        if (checkbox.dataset.qolResourceTimerBound !== 'true') {
-            checkbox.dataset.qolResourceTimerBound = 'true';
-            checkbox.addEventListener('change', event => {
-                setFeatureEnabled(Boolean(event.target.checked));
-            });
-        }
-    }
-
     function start() {
-        ensureMenuIntegration();
         refresh();
 
         if (intervalId === null) {
-            intervalId = window.setInterval(() => {
-                ensureMenuIntegration();
-                refresh();
-            }, REFRESH_MS);
+            intervalId = window.setInterval(refresh, REFRESH_MS);
         }
     }
 

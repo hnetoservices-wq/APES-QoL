@@ -2,7 +2,7 @@
  * APES QoL Extension
  * Module: Resource Capacity Timer
  *
- * Adds a compact live ETA beside each resource production value:
+ * Adds a compact live ETA below each resource production value:
  * - Positive production: time until storage is full.
  * - Negative production: time until the resource is empty.
  * - Zero production: stable.
@@ -103,30 +103,37 @@
         const style = document.createElement('style');
         style.id = STYLE_ID;
         style.textContent = `
+            #resourceBar .production:has(.${TIMER_CLASS}) {
+                min-height: 32px !important;
+                padding-top: 2px !important;
+                padding-bottom: 3px !important;
+                box-sizing: border-box !important;
+            }
+
+            #resourceBar .production .value:has(.${TIMER_CLASS}) {
+                display: flex !important;
+                flex-direction: column !important;
+                align-items: center !important;
+                justify-content: center !important;
+                gap: 1px !important;
+                min-height: 27px !important;
+            }
+
             #resourceBar .${TIMER_CLASS} {
-                display: inline !important;
-                margin-left: 4px !important;
+                display: block !important;
+                width: 100% !important;
+                margin: 0 !important;
+                padding: 0 !important;
                 font-family: inherit !important;
                 font-size: inherit !important;
                 font-weight: inherit !important;
                 font-style: inherit !important;
                 line-height: inherit !important;
                 letter-spacing: inherit !important;
+                color: inherit !important;
+                text-align: center !important;
                 white-space: nowrap !important;
-                vertical-align: baseline !important;
                 pointer-events: none !important;
-            }
-
-            #resourceBar .${TIMER_CLASS}[data-state="full"] {
-                color: #6d5436 !important;
-            }
-
-            #resourceBar .${TIMER_CLASS}[data-state="empty"] {
-                color: #9a3f2d !important;
-            }
-
-            #resourceBar .${TIMER_CLASS}[data-state="stable"] {
-                color: #7d7468 !important;
             }
         `;
         document.head.appendChild(style);
@@ -175,7 +182,6 @@
         if (production > 0) {
             if (current >= capacity) {
                 return {
-                    state: 'full',
                     label: 'Full',
                     title: `${data.name}: ${data.storage} is full.`
                 };
@@ -186,7 +192,6 @@
             const targetDate = new Date(Date.now() + (seconds * 1000));
 
             return {
-                state: 'full',
                 label: `Full ${formatCompactDuration(seconds)}`,
                 title: `${data.name}: ${data.storage} full in ${formatLongDuration(seconds)} at the current ${production.toLocaleString('en-US')}/h production. Estimated: ${targetDate.toLocaleString()}.`
             };
@@ -195,7 +200,6 @@
         if (production < 0) {
             if (current <= 0) {
                 return {
-                    state: 'empty',
                     label: 'Empty',
                     title: `${data.name}: storage is empty.`
                 };
@@ -205,14 +209,12 @@
             const targetDate = new Date(Date.now() + (seconds * 1000));
 
             return {
-                state: 'empty',
                 label: `Empty ${formatCompactDuration(seconds)}`,
                 title: `${data.name}: empty in ${formatLongDuration(seconds)} at the current ${production.toLocaleString('en-US')}/h production. Estimated: ${targetDate.toLocaleString()}.`
             };
         }
 
         return {
-            state: 'stable',
             label: 'Stable',
             title: `${data.name}: production is 0/h, so the stored amount is stable.`
         };
@@ -228,8 +230,7 @@
         }
 
         const state = calculateState(data);
-        timer.dataset.state = state.state;
-        timer.textContent = `· ${state.label}`;
+        timer.textContent = state.label;
         timer.title = state.title;
     }
 

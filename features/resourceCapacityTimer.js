@@ -13,6 +13,7 @@
     const FEATURE_KEY = 'resourceCapacityTimer';
     const STYLE_ID = 'qol-resource-capacity-timer-styles';
     const TIMER_CLASS = 'qol-resource-capacity-eta';
+    const ENABLED_BODY_CLASS = 'qol-resource-capacity-timer-enabled';
     const REFRESH_MS = 1000;
 
     const RESOURCES = [
@@ -30,15 +31,29 @@
             : localStorage.getItem(`qol_${FEATURE_KEY}`) !== 'false';
     }
 
-    function parseSignedInteger(value) {
-        const text = String(value ?? '')
+    function normalizeNumericText(value) {
+        return String(value ?? '')
             .replace(/\u2212/g, '-')
             .replace(/[\u200E\u200F\u202A-\u202E\u2066-\u2069]/g, '')
+            .replace(/\s+/g, '')
             .trim();
+    }
 
+    function parseSignedInteger(value) {
+        const text = normalizeNumericText(value);
         if (!text) return null;
 
-        const negative = /-/.test(text);
+        const compactMatch = text.match(/^([+-]?)(\d+(?:[.,]\d+)?)([kKmM])$/);
+        if (compactMatch) {
+            const sign = compactMatch[1] === '-' ? -1 : 1;
+            const number = Number.parseFloat(compactMatch[2].replace(',', '.'));
+            const suffix = compactMatch[3].toLowerCase();
+            const multiplier = suffix === 'm' ? 1000000 : 1000;
+            const result = sign * number * multiplier;
+            return Number.isFinite(result) ? Math.round(result) : null;
+        }
+
+        const negative = /^-/.test(text);
         const digits = text.replace(/[^0-9]/g, '');
         if (!digits) return null;
 
@@ -135,12 +150,20 @@
                 white-space: nowrap !important;
                 pointer-events: none !important;
             }
+
+            body.${ENABLED_BODY_CLASS} #tileInformation {
+                margin-top: 14px !important;
+            }
         `;
         document.head.appendChild(style);
     }
 
     function removeTimers() {
         document.querySelectorAll(`#resourceBar .${TIMER_CLASS}`).forEach(element => element.remove());
+    }
+
+    function setEnabledLayout(enabled) {
+        document.body?.classList.toggle(ENABLED_BODY_CLASS, Boolean(enabled));
     }
 
     function readResource(resource) {
@@ -155,11 +178,14 @@
 
         if (!progressbar || !productionNode) return null;
 
-        const current = parseUnsignedInteger(amountNode?.textContent)
-            ?? parseUnsignedInteger(progressbar.getAttribute('value'));
+        // Prefer Travian's raw numeric attributes. The visible UI abbreviates
+        // large capacities (for example 101000 as "101k"), which must not be
+        // interpreted as the literal value 101.
+        const current = parseUnsignedInteger(progressbar.getAttribute('value'))
+            ?? parseUnsignedInteger(amountNode?.textContent);
 
-        const capacity = parseUnsignedInteger(capacityNode?.textContent)
-            ?? parseUnsignedInteger(progressbar.getAttribute('max-value'));
+        const capacity = parseUnsignedInteger(progressbar.getAttribute('max-value'))
+            ?? parseUnsignedInteger(capacityNode?.textContent);
 
         const production = parseSignedInteger(directText(productionNode));
 
@@ -235,7 +261,10 @@
     }
 
     function refresh() {
-        if (!isEnabled()) {
+        const enabled = isEnabled();
+        setEnabledLayout(enabled);
+
+        if (!enabled) {
             removeTimers();
             return;
         }
@@ -257,7 +286,10 @@
 
     window.addEventListener('qol_setting_changed', event => {
         if (event.detail?.key !== FEATURE_KEY) return;
-        if (!event.detail.enabled) removeTimers();
+        if (!event.detail.enabled) {
+            removeTimers();
+            setEnabledLayout(false);
+        }
         refresh();
     });
 

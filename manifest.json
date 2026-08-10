@@ -27,6 +27,7 @@
         "features/navigationKeys.js",
         "features/mapHover.js",
         "features/menu.js",
+        "features/resourceCapacityTimer.js",
         "features/oasisScanner.js",
         "features/rallyPointEnhancer.js",
         "features/buildingQueueEnhanced.js",

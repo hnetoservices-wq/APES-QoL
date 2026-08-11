@@ -45,7 +45,8 @@
         "features/content.js"
       ],
       "css": [
-        "features/style.css"
+        "features/style.css",
+        "features/oasisScannerUI.css"
       ],
       "run_at": "document_idle"
     }

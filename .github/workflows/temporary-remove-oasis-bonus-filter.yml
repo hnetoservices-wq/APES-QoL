@@ -1,17 +1,15 @@
-# Triggered after workflow creation so the patch runs on main.
 name: Temporary Remove Oasis Bonus Filter
 
 on:
-  push:
-    branches: [main]
-    paths:
-      - ".github/workflows/temporary-remove-oasis-bonus-filter.yml"
+  issues:
+    types: [opened]
 
 permissions:
   contents: write
 
 jobs:
   patch-oasis-scanner:
+    if: github.event.issue.title == 'TEMP: Remove Oasis Scanner bonus dropdown'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4

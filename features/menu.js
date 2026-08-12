@@ -26,13 +26,6 @@ const QOL_BUTTON_GAP = 6;
 
 const BASIC_FEATURES = [
     {
-        id: 'qol-chk-building-queue',
-        key: 'buildingQueueEnhanced',
-        name: 'Building Queue Enhanced',
-        icon: '⌂',
-        description: 'Shows the exact clock time when active construction queue items will finish.'
-    },
-    {
         id: 'qol-chk-auction-house-scanner',
         key: 'auctionHouseScanner',
         name: 'Auction House Scanner',

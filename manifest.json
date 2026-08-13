@@ -40,6 +40,7 @@
         "features/npcCalculator.js",
         "features/auctionHouseScanner.js",
         "features/cpManager.js",
+        "features/visualTribeSkins.js",
         "features/help.js",
         "features/content.js"
       ],

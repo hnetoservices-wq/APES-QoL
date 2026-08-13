@@ -130,6 +130,14 @@ const ADVANCED_FEATURES = [
     }
 ];
 
+    {
+        id: 'qol-chk-visual-tribe-skins',
+        key: 'visualTribeSkins',
+        name: 'Visual Tribe Skins',
+        icon: '◈',
+        description: 'Prepares a client-side building-skin catalogue while you browse tribe buildings. It never changes gameplay data.'
+    },
+
 const KEYBINDS = [
     { keys: ['W', 'A', 'S', 'D'], label: 'Map Navigation (2x Speed)', fixed: true },
     { keys: ['1'], label: 'Village View', id: 'qol-chk-village', key: 'keybind_village' },

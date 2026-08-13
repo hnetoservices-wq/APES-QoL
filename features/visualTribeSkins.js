@@ -441,6 +441,8 @@
             start();
             capture('feature-enabled');
             injectToolUi();
+        } else {
+            document.getElementById(PANEL_ID)?.style.setProperty('display', 'none', 'important');
         }
     });
 

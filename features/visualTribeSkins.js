@@ -15,6 +15,8 @@
     const observedNodes = new WeakSet();
     let observer = null;
     let scheduled = false;
+    let catalogueCache = null;
+    let saveTimer = null;
 
     function enabled() {
         return typeof window.isQolEnabled !== 'function' || window.isQolEnabled(FEATURE_KEY);
@@ -25,20 +27,26 @@
     }
 
     function loadCatalogue() {
+        if (catalogueCache) return catalogueCache;
         try {
             const saved = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}');
-            return saved && typeof saved === 'object' ? saved : {};
+            catalogueCache = saved && typeof saved === 'object' ? saved : {};
         } catch (_) {
-            return {};
+            catalogueCache = {};
         }
+        return catalogueCache;
     }
 
     function saveCatalogue(catalogue) {
-        try {
-            localStorage.setItem(STORAGE_KEY, JSON.stringify(catalogue));
-        } catch (error) {
-            console.warn('[APES Visual Tribe Skins] Could not save asset catalogue.', error);
-        }
+        catalogueCache = catalogue;
+        clearTimeout(saveTimer);
+        saveTimer = setTimeout(() => {
+            try {
+                localStorage.setItem(STORAGE_KEY, JSON.stringify(catalogueCache));
+            } catch (error) {
+                console.warn('[APES Visual Tribe Skins] Could not save asset catalogue.', error);
+            }
+        }, 350);
     }
 
     function classify(value) {

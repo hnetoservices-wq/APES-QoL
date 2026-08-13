@@ -15,6 +15,7 @@
     const BUILDING_IDS = Array.from({ length: 60 }, (_, index) => index + 1);
     const TRIBE_VARIANTS = ['t00', 't10', 't20', 't30', 't40', 't50'];
     const PROBE_CONCURRENCY = 4;
+    const EXPORT_BUTTON_ID = 'qol-tribe-skins-export';
     const observedNodes = new WeakSet();
     let observer = null;
     let scheduled = false;
@@ -131,9 +132,52 @@
         saveCatalogue(catalogue);
     }
 
+    function ensureExportButton() {
+        const card = document.querySelector('[data-feature-key="' + FEATURE_KEY + '"]');
+        const copy = card?.querySelector('.qol-feature-copy');
+        if (!copy || document.getElementById(EXPORT_BUTTON_ID)) return;
+
+        const button = document.createElement('button');
+        button.id = EXPORT_BUTTON_ID;
+        button.type = 'button';
+        button.textContent = 'Copy asset catalogue';
+        button.style.cssText = [
+            'all:unset',
+            'display:inline-flex',
+            'align-items:center',
+            'justify-content:center',
+            'width:max-content',
+            'margin-top:7px',
+            'padding:4px 7px',
+            'border:1px solid #7d6342',
+            'border-radius:3px',
+            'background:#ebdcb9',
+            'color:#4a3821',
+            'font:700 9px Arial,Helvetica,sans-serif',
+            'cursor:pointer',
+            'box-sizing:border-box'
+        ].join('!important;') + '!important;';
+
+        button.addEventListener('mouseenter', () => { button.style.background = '#f0e2ca'; });
+        button.addEventListener('mouseleave', () => { button.style.background = '#ebdcb9'; });
+        button.addEventListener('click', async event => {
+            event.preventDefault();
+            event.stopPropagation();
+            try {
+                await navigator.clipboard.writeText(JSON.stringify(getReport(), null, 2));
+                button.textContent = 'Catalogue copied';
+                setTimeout(() => { button.textContent = 'Copy asset catalogue'; }, 1800);
+            } catch (_) {
+                button.textContent = 'Clipboard blocked';
+            }
+        });
+        copy.appendChild(button);
+    }
+
     function setStatus(message) {
         const description = document.querySelector('[data-feature-key="' + FEATURE_KEY + '"] .qol-feature-desc');
         if (description) description.textContent = message;
+        ensureExportButton();
     }
 
     function getProbeBaseUrl() {
@@ -324,6 +368,7 @@
     function start() {
         if (observer || !enabled()) return;
         capture('initial');
+        setTimeout(ensureExportButton, 250);
         setTimeout(discoverBuildingAssets, 800);
 
         observer = new MutationObserver(mutations => {

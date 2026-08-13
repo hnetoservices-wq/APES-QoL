@@ -137,8 +137,8 @@
         return (tag + id + classes).slice(0, 180);
     }
 
-    function inspectElement(element) {
-        if (!(element instanceof Element) || observedNodes.has(element)) return;
+    function inspectElement(element, force = false) {
+        if (!(element instanceof Element) || (!force && observedNodes.has(element))) return;
         observedNodes.add(element);
 
         if (element instanceof HTMLImageElement) {
@@ -228,7 +228,7 @@
                         inspectTree(node);
                     }
                 });
-                if (mutation.type === 'attributes') inspectElement(mutation.target);
+                if (mutation.type === 'attributes') inspectElement(mutation.target, true);
             });
 
             if (!scheduled) {

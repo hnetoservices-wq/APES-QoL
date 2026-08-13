@@ -13,12 +13,12 @@
     const STORAGE_KEY = 'apes_visual_tribe_skin_assets_v1';
     const MAX_ASSETS = 4000;
     const BUILDING_IDS = Array.from({ length: 60 }, (_, index) => index + 1);
-    const TRIBE_VARIANTS = ['t00', 't10', 't20', 't30', 't40', 't50'];
+    const TRIBE_VARIANTS = ['r00', 'g00', 't00', 't10'];
     const PROBE_CONCURRENCY = 4;
     const TOOLBAR_BUTTON_ID = 'qol-tribe-skins-toggle-btn';
     const PANEL_ID = 'qol-tribe-skins-panel';
     const SKIN_SELECTION_KEY = 'apes_visual_tribe_skin_selection_v1';
-    const SKIN_VARIANTS = { roman: 't00', teuton: 't10', gaul: 't20' };
+    const SKIN_VARIANTS = { roman: 'r00', teuton: 't10', gaul: 'g00' };
     const observedNodes = new WeakSet();
     let observer = null;
     let scheduled = false;
@@ -26,6 +26,7 @@
     let saveTimer = null;
     let probeInProgress = false;
     let latestStatus = 'Ready to collect building artwork from Travian.';
+    const TEUTON_SPECIAL_VARIANTS = { 13: 't00', 16: 't00', 46: 't00' };
 
     function enabled() {
         return typeof window.isQolEnabled !== 'function' || window.isQolEnabled(FEATURE_KEY);
@@ -185,25 +186,40 @@
         return Object.keys(assets).find(url => cleanAssetUrl(url).endsWith(suffix)) || '';
     }
 
+    function targetPathMatch(value) {
+        try {
+            return new URL(value, location.href).pathname.match(/\/g(\d+)_[a-z]\d+\.png$/i);
+        } catch (_) {
+            return null;
+        }
+    }
+
+    function getTargetVariant(buildingId, choice) {
+        if (choice === 'teuton') return TEUTON_SPECIAL_VARIANTS[buildingId] || 't10';
+        return SKIN_VARIANTS[choice] || '';
+    }
+
     function applySelectedSkin() {
         if (!enabled()) return;
         const choice = getSkinSelection();
-        const targetVariant = SKIN_VARIANTS[choice];
+        const requestedSkin = SKIN_VARIANTS[choice];
         document.querySelectorAll('img.location[src*="/layout/images/building/thumb/"]').forEach(image => {
             const original = image.dataset.qolTribeSkinOriginal || image.currentSrc || image.src;
             if (!image.dataset.qolTribeSkinOriginal) image.dataset.qolTribeSkinOriginal = original;
 
-            if (!targetVariant) {
+            if (!requestedSkin) {
                 delete image.dataset.qolTribeSkinFailed;
                 if (image.src !== original) image.src = original;
                 return;
             }
 
+            const match = targetPathMatch(original);
+            if (!match) return;
+            const targetVariant = getTargetVariant(Number(match[1]), choice);
             if (image.dataset.qolTribeSkinFailed === targetVariant) return;
 
             const target = new URL(original, location.href);
-            if (!/\/g\d+_t\d+\.png$/i.test(target.pathname)) return;
-            target.pathname = target.pathname.replace(/_t\d+(\.png)$/i, '_' + targetVariant + '$1');
+            target.pathname = target.pathname.replace(/_[a-z]\d+(\.png)$/i, '_' + targetVariant + '$1');
             target.search = '';
             if (hasCataloguedAsset(target.href) && cleanAssetUrl(image.src) !== cleanAssetUrl(target.href)) {
                 const fallback = () => {

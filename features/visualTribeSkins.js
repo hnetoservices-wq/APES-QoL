@@ -17,8 +17,6 @@
     let scheduled = false;
     let catalogueCache = null;
     let saveTimer = null;
-    let catalogueCache = null;
-    let saveTimer = null;
 
     function enabled() {
         return typeof window.isQolEnabled !== 'function' || window.isQolEnabled(FEATURE_KEY);

@@ -163,7 +163,8 @@ const TOOLBAR_ITEMS = [
     { id: 'qol-npc-calc-toggle-btn', label: 'NPC Calculator', key: 'npcCalculator' },
     { id: 'qol-oasis-toggle-btn', label: 'Oasis Scanner', key: 'oasisScanner' },
     { id: 'qol-report-archive-toggle', label: 'Report Archive', key: 'reportArchive' },
-    { id: 'qol-cp-toggle-btn', label: 'CP Manager', key: 'cpManager' }
+    { id: 'qol-cp-toggle-btn', label: 'CP Manager', key: 'cpManager' },
+    { id: 'qol-tribe-skins-toggle-btn', label: 'Visual Tribe Skins', key: 'visualTribeSkins' }
 ];
 
 const menuConfigMap = Object.fromEntries([
@@ -251,7 +252,8 @@ function injectQolMenuStyles() {
         body.qol-toolbar-collapsed #qol-npc-calc-toggle-btn,
         body.qol-toolbar-collapsed #qol-oasis-toggle-btn,
         body.qol-toolbar-collapsed #qol-report-archive-toggle,
-        body.qol-toolbar-collapsed #qol-cp-toggle-btn{visibility:hidden!important;opacity:0!important;pointer-events:none!important}
+        body.qol-toolbar-collapsed #qol-cp-toggle-btn,
+        body.qol-toolbar-collapsed #qol-tribe-skins-toggle-btn{visibility:hidden!important;opacity:0!important;pointer-events:none!important}
 
         #${QOL_TOOLBAR_DROPDOWN_ID}{position:fixed!important;display:none!important;flex-direction:column!important;min-width:220px!important;max-width:min(300px,88vw)!important;max-height:min(520px,80vh)!important;overflow-y:auto!important;padding:5px!important;border:2px solid #634d31!important;border-radius:5px!important;background:#f7f5f0!important;box-shadow:0 10px 26px rgba(0,0,0,.38)!important;z-index:1000001!important;font-family:Arial,Helvetica,sans-serif!important;box-sizing:border-box!important}
         #${QOL_TOOLBAR_DROPDOWN_ID}.qol-open{display:flex!important}

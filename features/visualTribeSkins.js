@@ -15,13 +15,15 @@
     const BUILDING_IDS = Array.from({ length: 60 }, (_, index) => index + 1);
     const TRIBE_VARIANTS = ['t00', 't10', 't20', 't30', 't40', 't50'];
     const PROBE_CONCURRENCY = 4;
-    const EXPORT_BUTTON_ID = 'qol-tribe-skins-export';
+    const TOOLBAR_BUTTON_ID = 'qol-tribe-skins-toggle-btn';
+    const PANEL_ID = 'qol-tribe-skins-panel';
     const observedNodes = new WeakSet();
     let observer = null;
     let scheduled = false;
     let catalogueCache = null;
     let saveTimer = null;
     let probeInProgress = false;
+    let latestStatus = 'Ready to collect building artwork from Travian.';
 
     function enabled() {
         return typeof window.isQolEnabled !== 'function' || window.isQolEnabled(FEATURE_KEY);
@@ -132,52 +134,86 @@
         saveCatalogue(catalogue);
     }
 
-    function ensureExportButton() {
-        const card = document.querySelector('[data-feature-key="' + FEATURE_KEY + '"]');
-        const copy = card?.querySelector('.qol-feature-copy');
-        if (!copy || document.getElementById(EXPORT_BUTTON_ID)) return;
-
-        const button = document.createElement('button');
-        button.id = EXPORT_BUTTON_ID;
-        button.type = 'button';
-        button.textContent = 'Copy asset catalogue';
-        button.style.cssText = [
-            'all:unset',
-            'display:inline-flex',
-            'align-items:center',
-            'justify-content:center',
-            'width:max-content',
-            'margin-top:7px',
-            'padding:4px 7px',
-            'border:1px solid #7d6342',
-            'border-radius:3px',
-            'background:#ebdcb9',
-            'color:#4a3821',
-            'font:700 9px Arial,Helvetica,sans-serif',
-            'cursor:pointer',
-            'box-sizing:border-box'
-        ].join('!important;') + '!important;';
-
-        button.addEventListener('mouseenter', () => { button.style.background = '#f0e2ca'; });
-        button.addEventListener('mouseleave', () => { button.style.background = '#ebdcb9'; });
-        button.addEventListener('click', async event => {
-            event.preventDefault();
-            event.stopPropagation();
-            try {
-                await navigator.clipboard.writeText(JSON.stringify(getReport(), null, 2));
-                button.textContent = 'Catalogue copied';
-                setTimeout(() => { button.textContent = 'Copy asset catalogue'; }, 1800);
-            } catch (_) {
-                button.textContent = 'Clipboard blocked';
-            }
-        });
-        copy.appendChild(button);
+    function setStatus(message) {
+        latestStatus = message;
+        const status = document.querySelector('#' + PANEL_ID + ' .qol-tribe-skins-status');
+        if (status) status.textContent = message;
     }
 
-    function setStatus(message) {
-        const description = document.querySelector('[data-feature-key="' + FEATURE_KEY + '"] .qol-feature-desc');
-        if (description) description.textContent = message;
-        ensureExportButton();
+    function injectToolUi() {
+        if (!enabled()) return;
+
+        let button = document.getElementById(TOOLBAR_BUTTON_ID);
+        if (!button) {
+            button = document.createElement('div');
+            button.id = TOOLBAR_BUTTON_ID;
+            button.title = 'Visual Tribe Skins';
+            button.setAttribute('role', 'button');
+            button.setAttribute('tabindex', '0');
+            button.setAttribute('aria-label', 'Open Visual Tribe Skins');
+            button.textContent = '◈';
+            button.style.cssText = 'position:fixed!important;display:none;align-items:center;justify-content:center;width:30px;height:30px;margin:0;padding:0;border:2px solid #7d6342;border-radius:50%;background:#ebdcb9;color:#654c30;box-shadow:0 2px 4px rgba(0,0,0,.22);cursor:pointer;user-select:none;box-sizing:border-box;z-index:9999;font:700 17px Arial,Helvetica,sans-serif;text-shadow:none;';
+            const toggle = event => {
+                event.preventDefault();
+                event.stopPropagation();
+                const panel = document.getElementById(PANEL_ID);
+                if (!panel) return;
+                panel.style.display = panel.style.display === 'flex' ? 'none' : 'flex';
+            };
+            button.addEventListener('click', toggle);
+            button.addEventListener('keydown', event => {
+                if (event.key === 'Enter' || event.key === ' ') toggle(event);
+            });
+            document.body.appendChild(button);
+        }
+
+        let panel = document.getElementById(PANEL_ID);
+        if (!panel) {
+            panel = document.createElement('section');
+            panel.id = PANEL_ID;
+            panel.innerHTML = `
+                <header>
+                    <span>Visual Tribe Skins</span>
+                    <button type="button" data-close aria-label="Close">×</button>
+                </header>
+                <div class="qol-tribe-skins-body">
+                    <p>Collects Travian’s public building artwork so future tribe skins can replace each building with its exact Roman, Teuton or Gaul equivalent.</p>
+                    <button type="button" class="qol-tribe-skins-action" data-build>Build Asset Catalogue</button>
+                    <p class="qol-tribe-skins-status"></p>
+                    <button type="button" class="qol-tribe-skins-action secondary" data-copy>Copy Asset Catalogue</button>
+                </div>
+            `;
+            panel.style.cssText = 'position:fixed;right:24px;top:74px;z-index:1000001;display:none;flex-direction:column;width:min(360px,calc(100vw - 32px));border:3px solid #634d31;border-radius:5px;background:#f7f5f0;box-shadow:0 10px 30px rgba(0,0,0,.5);overflow:hidden;font-family:Arial,Helvetica,sans-serif;color:#332719;text-shadow:none;';
+            const header = panel.querySelector('header');
+            header.style.cssText = 'display:flex;align-items:center;justify-content:space-between;padding:9px 11px;background:linear-gradient(to bottom,#6d5436,#543f26);color:#f7f5f0;font-size:13px;font-weight:700;';
+            const close = panel.querySelector('[data-close]');
+            close.style.cssText = 'all:unset;cursor:pointer;padding:0 3px;color:#fff;font-size:21px;line-height:15px;';
+            const body = panel.querySelector('.qol-tribe-skins-body');
+            body.style.cssText = 'display:flex;flex-direction:column;gap:9px;padding:12px;font-size:10px;line-height:1.45;';
+            panel.querySelector('.qol-tribe-skins-body p').style.margin = '0';
+            const status = panel.querySelector('.qol-tribe-skins-status');
+            status.style.cssText = 'min-height:28px;margin:0;padding:7px 8px;border:1px solid #d6cab8;border-radius:3px;background:#fff;color:#746653;';
+            panel.querySelectorAll('.qol-tribe-skins-action').forEach(action => {
+                action.style.cssText = 'all:unset;display:flex;align-items:center;justify-content:center;padding:7px 10px;border:1px solid #7d6342;border-radius:3px;background:#7d6342;color:#fff;cursor:pointer;font:700 10px Arial,Helvetica,sans-serif;text-align:center;';
+            });
+            panel.querySelector('.secondary').style.background = '#ebdcb9';
+            panel.querySelector('.secondary').style.color = '#4a3821';
+            close.addEventListener('click', () => { panel.style.display = 'none'; });
+            panel.querySelector('[data-build]').addEventListener('click', () => discoverBuildingAssets(true));
+            panel.querySelector('[data-copy]').addEventListener('click', async event => {
+                const copyButton = event.currentTarget;
+                try {
+                    await navigator.clipboard.writeText(JSON.stringify(getReport(), null, 2));
+                    copyButton.textContent = 'Catalogue copied';
+                    setTimeout(() => { copyButton.textContent = 'Copy Asset Catalogue'; }, 1800);
+                } catch (_) {
+                    copyButton.textContent = 'Clipboard blocked';
+                }
+            });
+            document.body.appendChild(panel);
+        }
+        panel.querySelector('.qol-tribe-skins-status').textContent = latestStatus;
+        window.qolRepositionAllButtons?.();
     }
 
     function getProbeBaseUrl() {
@@ -210,13 +246,13 @@
         });
     }
 
-    async function discoverBuildingAssets() {
+    async function discoverBuildingAssets(force = false) {
         if (probeInProgress || !enabled()) return;
 
         const catalogue = loadCatalogue();
         const key = serverKey();
         const server = catalogue[key] || { capturedAt: '', assets: {} };
-        if (server.buildingProbe?.status === 'complete') {
+        if (!force && server.buildingProbe?.status === 'complete') {
             setStatus('Building artwork catalogue ready. ' + server.buildingProbe.found + ' files found.');
             return;
         }
@@ -368,8 +404,7 @@
     function start() {
         if (observer || !enabled()) return;
         capture('initial');
-        setTimeout(ensureExportButton, 250);
-        setTimeout(discoverBuildingAssets, 800);
+        injectToolUi();
 
         observer = new MutationObserver(mutations => {
             if (!enabled()) return;
@@ -405,7 +440,7 @@
         if (event.detail.enabled) {
             start();
             capture('feature-enabled');
-            setTimeout(discoverBuildingAssets, 250);
+            injectToolUi();
         }
     });
 

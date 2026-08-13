@@ -3,11 +3,20 @@
  * Unified Settings Menu + Responsive Toolbar
  */
 
+const QOL_DEFAULT_DISABLED_FEATURES = new Set([
+    'cpManager',
+    'oasisScanner',
+    'reportArchive',
+    'watchlist'
+]);
+
 window.isQolEnabled = function(key) {
     try {
-        return localStorage.getItem(`qol_${key}`) !== 'false';
+        const storedValue = localStorage.getItem(`qol_${key}`);
+        if (storedValue !== null) return storedValue !== 'false';
+        return !QOL_DEFAULT_DISABLED_FEATURES.has(key);
     } catch (_) {
-        return true;
+        return !QOL_DEFAULT_DISABLED_FEATURES.has(key);
     }
 };
 

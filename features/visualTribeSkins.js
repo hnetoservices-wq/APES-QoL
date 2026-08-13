@@ -140,8 +140,33 @@
         if (status) status.textContent = message;
     }
 
+    function injectToolStyles() {
+        if (document.getElementById('qol-tribe-skins-styles')) return;
+        const style = document.createElement('style');
+        style.id = 'qol-tribe-skins-styles';
+        style.textContent = `
+            #${TOOLBAR_BUTTON_ID}{position:fixed!important;display:none!important;align-items:center!important;justify-content:center!important;width:30px!important;height:30px!important;margin:0!important;padding:0!important;border:2px solid #7d6342!important;border-radius:50%!important;background:#ebdcb9!important;color:#654c30!important;box-shadow:0 2px 4px rgba(0,0,0,.22)!important;cursor:pointer!important;user-select:none!important;box-sizing:border-box!important;z-index:9999!important;font:700 17px Arial,Helvetica,sans-serif!important;text-shadow:none!important}
+            #${TOOLBAR_BUTTON_ID}:hover{transform:scale(1.08)!important;background:#f7f5f0!important}
+            #${PANEL_ID},#${PANEL_ID} *{box-sizing:border-box!important;font-family:Arial,Helvetica,sans-serif!important;text-shadow:none!important}
+            #${PANEL_ID}{position:fixed!important;right:24px!important;top:74px!important;z-index:1000001!important;display:none!important;flex-direction:column!important;width:min(360px,calc(100vw - 32px))!important;border:3px solid #634d31!important;border-radius:5px!important;background:#f7f5f0!important;box-shadow:0 10px 30px rgba(0,0,0,.5)!important;overflow:hidden!important;color:#332719!important}
+            #${PANEL_ID}.qol-tribe-skins-open{display:flex!important}
+            #${PANEL_ID} .qol-tribe-skins-header{display:flex!important;align-items:center!important;justify-content:space-between!important;padding:9px 11px!important;background:linear-gradient(to bottom,#6d5436,#543f26)!important;color:#f7f5f0!important;font-size:13px!important;font-weight:700!important}
+            #${PANEL_ID} .qol-tribe-skins-close{display:flex!important;align-items:center!important;justify-content:center!important;width:22px!important;height:22px!important;border-radius:3px!important;background:rgba(0,0,0,.2)!important;color:#fff!important;font-size:20px!important;font-weight:700!important;line-height:1!important;cursor:pointer!important}
+            #${PANEL_ID} .qol-tribe-skins-close:hover{background:rgba(255,255,255,.15)!important}
+            #${PANEL_ID} .qol-tribe-skins-body{display:flex!important;flex-direction:column!important;gap:9px!important;padding:12px!important;background:#f7f5f0!important;color:#332719!important;font-size:10px!important;line-height:1.45!important}
+            #${PANEL_ID} .qol-tribe-skins-copy{margin:0!important;color:#5f513f!important}
+            #${PANEL_ID} .qol-tribe-skins-status{min-height:28px!important;margin:0!important;padding:7px 8px!important;border:1px solid #d6cab8!important;border-radius:3px!important;background:#fff!important;color:#746653!important}
+            #${PANEL_ID} .qol-tribe-skins-action{display:flex!important;align-items:center!important;justify-content:center!important;width:100%!important;min-height:29px!important;margin:0!important;padding:7px 10px!important;border:1px solid #42311c!important;border-radius:3px!important;background:#7d6342!important;color:#fff!important;box-shadow:0 1px 3px rgba(0,0,0,.2)!important;cursor:pointer!important;user-select:none!important;font-size:10px!important;font-weight:700!important;line-height:1.2!important;text-align:center!important}
+            #${PANEL_ID} .qol-tribe-skins-action:hover{background:#8d7352!important}
+            #${PANEL_ID} .qol-tribe-skins-action.qol-secondary{background:#ebdcb9!important;border-color:#7d6342!important;color:#4a3821!important}
+            #${PANEL_ID} .qol-tribe-skins-action.qol-secondary:hover{background:#f0e2ca!important}
+        `;
+        document.head.appendChild(style);
+    }
+
     function injectToolUi() {
         if (!enabled()) return;
+        injectToolStyles();
 
         let button = document.getElementById(TOOLBAR_BUTTON_ID);
         if (!button) {
@@ -152,13 +177,10 @@
             button.setAttribute('tabindex', '0');
             button.setAttribute('aria-label', 'Open Visual Tribe Skins');
             button.textContent = '◈';
-            button.style.cssText = 'position:fixed!important;display:none;align-items:center;justify-content:center;width:30px;height:30px;margin:0;padding:0;border:2px solid #7d6342;border-radius:50%;background:#ebdcb9;color:#654c30;box-shadow:0 2px 4px rgba(0,0,0,.22);cursor:pointer;user-select:none;box-sizing:border-box;z-index:9999;font:700 17px Arial,Helvetica,sans-serif;text-shadow:none;';
             const toggle = event => {
                 event.preventDefault();
                 event.stopPropagation();
-                const panel = document.getElementById(PANEL_ID);
-                if (!panel) return;
-                panel.style.display = panel.style.display === 'flex' ? 'none' : 'flex';
+                document.getElementById(PANEL_ID)?.classList.toggle('qol-tribe-skins-open');
             };
             button.addEventListener('click', toggle);
             button.addEventListener('keydown', event => {
@@ -169,45 +191,39 @@
 
         let panel = document.getElementById(PANEL_ID);
         if (!panel) {
-            panel = document.createElement('section');
+            panel = document.createElement('div');
             panel.id = PANEL_ID;
             panel.innerHTML = `
-                <header>
+                <div class="qol-tribe-skins-header">
                     <span>Visual Tribe Skins</span>
-                    <button type="button" data-close aria-label="Close">×</button>
-                </header>
+                    <div class="qol-tribe-skins-close" data-close role="button" tabindex="0" aria-label="Close">×</div>
+                </div>
                 <div class="qol-tribe-skins-body">
-                    <p>Collects Travian’s public building artwork so future tribe skins can replace each building with its exact Roman, Teuton or Gaul equivalent.</p>
-                    <button type="button" class="qol-tribe-skins-action" data-build>Build Asset Catalogue</button>
+                    <p class="qol-tribe-skins-copy">Collects Travian’s public building artwork so future tribe skins can use each tribe’s matching building appearance.</p>
+                    <div class="qol-tribe-skins-action" data-build role="button" tabindex="0">Build Asset Catalogue</div>
                     <p class="qol-tribe-skins-status"></p>
-                    <button type="button" class="qol-tribe-skins-action secondary" data-copy>Copy Asset Catalogue</button>
+                    <div class="qol-tribe-skins-action qol-secondary" data-copy role="button" tabindex="0">Copy Asset Catalogue</div>
                 </div>
             `;
-            panel.style.cssText = 'position:fixed;right:24px;top:74px;z-index:1000001;display:none;flex-direction:column;width:min(360px,calc(100vw - 32px));border:3px solid #634d31;border-radius:5px;background:#f7f5f0;box-shadow:0 10px 30px rgba(0,0,0,.5);overflow:hidden;font-family:Arial,Helvetica,sans-serif;color:#332719;text-shadow:none;';
-            const header = panel.querySelector('header');
-            header.style.cssText = 'display:flex;align-items:center;justify-content:space-between;padding:9px 11px;background:linear-gradient(to bottom,#6d5436,#543f26);color:#f7f5f0;font-size:13px;font-weight:700;';
-            const close = panel.querySelector('[data-close]');
-            close.style.cssText = 'all:unset;cursor:pointer;padding:0 3px;color:#fff;font-size:21px;line-height:15px;';
-            const body = panel.querySelector('.qol-tribe-skins-body');
-            body.style.cssText = 'display:flex;flex-direction:column;gap:9px;padding:12px;font-size:10px;line-height:1.45;';
-            panel.querySelector('.qol-tribe-skins-body p').style.margin = '0';
-            const status = panel.querySelector('.qol-tribe-skins-status');
-            status.style.cssText = 'min-height:28px;margin:0;padding:7px 8px;border:1px solid #d6cab8;border-radius:3px;background:#fff;color:#746653;';
-            panel.querySelectorAll('.qol-tribe-skins-action').forEach(action => {
-                action.style.cssText = 'all:unset;display:flex;align-items:center;justify-content:center;padding:7px 10px;border:1px solid #7d6342;border-radius:3px;background:#7d6342;color:#fff;cursor:pointer;font:700 10px Arial,Helvetica,sans-serif;text-align:center;';
-            });
-            panel.querySelector('.secondary').style.background = '#ebdcb9';
-            panel.querySelector('.secondary').style.color = '#4a3821';
-            close.addEventListener('click', () => { panel.style.display = 'none'; });
-            panel.querySelector('[data-build]').addEventListener('click', () => discoverBuildingAssets(true));
-            panel.querySelector('[data-copy]').addEventListener('click', async event => {
-                const copyButton = event.currentTarget;
+            const activate = (element, handler) => {
+                element.addEventListener('click', handler);
+                element.addEventListener('keydown', event => {
+                    if (event.key === 'Enter' || event.key === ' ') {
+                        event.preventDefault();
+                        handler(event);
+                    }
+                });
+            };
+            activate(panel.querySelector('[data-close]'), () => panel.classList.remove('qol-tribe-skins-open'));
+            activate(panel.querySelector('[data-build]'), () => discoverBuildingAssets(true));
+            activate(panel.querySelector('[data-copy]'), async event => {
+                const copyControl = event.currentTarget;
                 try {
                     await navigator.clipboard.writeText(JSON.stringify(getReport(), null, 2));
-                    copyButton.textContent = 'Catalogue copied';
-                    setTimeout(() => { copyButton.textContent = 'Copy Asset Catalogue'; }, 1800);
+                    copyControl.textContent = 'Catalogue copied';
+                    setTimeout(() => { copyControl.textContent = 'Copy Asset Catalogue'; }, 1800);
                 } catch (_) {
-                    copyButton.textContent = 'Clipboard blocked';
+                    copyControl.textContent = 'Clipboard blocked';
                 }
             });
             document.body.appendChild(panel);

@@ -194,9 +194,12 @@
             if (!image.dataset.qolTribeSkinOriginal) image.dataset.qolTribeSkinOriginal = original;
 
             if (!targetVariant) {
+                delete image.dataset.qolTribeSkinFailed;
                 if (image.src !== original) image.src = original;
                 return;
             }
+
+            if (image.dataset.qolTribeSkinFailed === targetVariant) return;
 
             const target = new URL(original, location.href);
             if (!/\/g\d+_t\d+\.png$/i.test(target.pathname)) return;
@@ -204,7 +207,7 @@
             target.search = '';
             if (hasCataloguedAsset(target.href) && cleanAssetUrl(image.src) !== cleanAssetUrl(target.href)) {
                 const fallback = () => {
-                    image.dataset.qolTribeSkinFailed = 'true';
+                    image.dataset.qolTribeSkinFailed = targetVariant;
                     if (image.src !== original) image.src = original;
                 };
                 image.addEventListener('error', fallback, { once: true });

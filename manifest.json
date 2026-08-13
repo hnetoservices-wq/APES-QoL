@@ -26,6 +26,7 @@
         "features/mapKeys.js",
         "features/navigationKeys.js",
         "features/mapHover.js",
+        "features/featureDefaults.js",
         "features/menu.js",
         "features/resourceCapacityTimer.js",
         "features/oasisScanner.js",

@@ -221,13 +221,12 @@
             const target = new URL(original, location.href);
             target.pathname = target.pathname.replace(/_[a-z]\d+(\.png)$/i, '_' + targetVariant + '$1');
             target.search = '';
-            if (hasCataloguedAsset(target.href) && cleanAssetUrl(image.src) !== cleanAssetUrl(target.href)) {
+            if (cleanAssetUrl(image.src) !== cleanAssetUrl(target.href)) {
                 const fallback = () => {
                     image.dataset.qolTribeSkinFailed = targetVariant;
                     if (image.src !== original) image.src = original;
                 };
                 image.addEventListener('error', fallback, { once: true });
-                target.search = new URL(original, location.href).search;
                 image.src = target.href;
             }
         });

@@ -127,7 +127,7 @@ const ADVANCED_FEATURES = [
         name: 'Watchlists',
         icon: '◎',
         description: 'Saves and organizes players for quick access to profiles, hero data and tracking information.'
-    }
+    },
     {
         id: 'qol-chk-visual-tribe-skins',
         key: 'visualTribeSkins',

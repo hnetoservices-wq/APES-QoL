@@ -17,6 +17,8 @@
     const PROBE_CONCURRENCY = 4;
     const TOOLBAR_BUTTON_ID = 'qol-tribe-skins-toggle-btn';
     const PANEL_ID = 'qol-tribe-skins-panel';
+    const SKIN_SELECTION_KEY = 'apes_visual_tribe_skin_selection_v1';
+    const SKIN_VARIANTS = { roman: 't00', teuton: 't10', gaul: 't20' };
     const observedNodes = new WeakSet();
     let observer = null;
     let scheduled = false;
@@ -140,6 +142,105 @@
         if (status) status.textContent = message;
     }
 
+    function getSkinSelection() {
+        try {
+            const choice = localStorage.getItem(SKIN_SELECTION_KEY) || 'default';
+            return choice === 'default' || Object.hasOwn(SKIN_VARIANTS, choice) ? choice : 'default';
+        } catch (_) {
+            return 'default';
+        }
+    }
+
+    function setSkinSelection(choice) {
+        const selected = choice === 'default' || Object.hasOwn(SKIN_VARIANTS, choice) ? choice : 'default';
+        try {
+            localStorage.setItem(SKIN_SELECTION_KEY, selected);
+        } catch (_) {
+            // The selected visual skin remains active for this page even if storage is unavailable.
+        }
+        applySelectedSkin();
+        refreshSkinUi();
+    }
+
+    function cleanAssetUrl(value) {
+        try {
+            const url = new URL(value, location.href);
+            url.search = '';
+            url.hash = '';
+            return url.href;
+        } catch (_) {
+            return String(value || '').split(/[?#]/)[0];
+        }
+    }
+
+    function hasCataloguedAsset(url) {
+        const target = cleanAssetUrl(url);
+        const assets = loadCatalogue()[serverKey()]?.assets || {};
+        return Object.keys(assets).some(assetUrl => cleanAssetUrl(assetUrl) === target);
+    }
+
+    function getPreviewAsset(buildingId, variant) {
+        const assets = loadCatalogue()[serverKey()]?.assets || {};
+        const suffix = '/g' + buildingId + '_' + variant + '.png';
+        return Object.keys(assets).find(url => cleanAssetUrl(url).endsWith(suffix)) || '';
+    }
+
+    function applySelectedSkin() {
+        if (!enabled()) return;
+        const choice = getSkinSelection();
+        const targetVariant = SKIN_VARIANTS[choice];
+        document.querySelectorAll('img.location[src*="/layout/images/building/thumb/"]').forEach(image => {
+            const original = image.dataset.qolTribeSkinOriginal || image.currentSrc || image.src;
+            if (!image.dataset.qolTribeSkinOriginal) image.dataset.qolTribeSkinOriginal = original;
+
+            if (!targetVariant) {
+                if (image.src !== original) image.src = original;
+                return;
+            }
+
+            const target = new URL(original, location.href);
+            if (!/\/g\d+_t\d+\.png$/i.test(target.pathname)) return;
+            target.pathname = target.pathname.replace(/_t\d+(\.png)$/i, '_' + targetVariant + '$1');
+            target.search = '';
+            if (hasCataloguedAsset(target.href) && cleanAssetUrl(image.src) !== cleanAssetUrl(target.href)) {
+                image.src = target.href;
+            }
+        });
+    }
+
+    function previewHtml(tribe, variant) {
+        const stable = getPreviewAsset(20, variant);
+        const barracks = getPreviewAsset(19, variant);
+        const image = stable || barracks;
+        const name = tribe[0].toUpperCase() + tribe.slice(1);
+        return `
+            <div class="qol-tribe-skins-preview" data-preview="${tribe}">
+                <div>${name}</div>
+                ${image ? '<img src="' + image.replace(/"/g, '&quot;') + '" alt="' + name + ' building preview">' : '<span>Artwork unavailable</span>'}
+                <small>${variant}</small>
+            </div>
+        `;
+    }
+
+    function refreshSkinUi() {
+        const panel = document.getElementById(PANEL_ID);
+        if (!panel) return;
+        const selected = getSkinSelection();
+        panel.querySelectorAll('[data-skin]').forEach(control => {
+            control.classList.toggle('qol-active', control.dataset.skin === selected);
+        });
+        const current = panel.querySelector('.qol-tribe-skins-current');
+        if (current) current.textContent = selected === 'default'
+            ? 'Showing your real tribe artwork.'
+            : 'Showing ' + selected[0].toUpperCase() + selected.slice(1) + ' building artwork where available.';
+        const previews = panel.querySelector('.qol-tribe-skins-preview-grid');
+        if (previews) {
+            previews.innerHTML = Object.entries(SKIN_VARIANTS)
+                .map(([tribe, variant]) => previewHtml(tribe, variant))
+                .join('');
+        }
+    }
+
     function injectToolStyles() {
         if (document.getElementById('qol-tribe-skins-styles')) return;
         const style = document.createElement('style');
@@ -160,6 +261,16 @@
             #${PANEL_ID} .qol-tribe-skins-action:hover{background:#8d7352!important}
             #${PANEL_ID} .qol-tribe-skins-action.qol-secondary{background:#ebdcb9!important;border-color:#7d6342!important;color:#4a3821!important}
             #${PANEL_ID} .qol-tribe-skins-action.qol-secondary:hover{background:#f0e2ca!important}
+            #${PANEL_ID} .qol-tribe-skins-choice-label{margin:2px 0 -3px!important;color:#5f513f!important;font-size:10px!important;font-weight:700!important}
+            #${PANEL_ID} .qol-tribe-skins-choices{display:grid!important;grid-template-columns:repeat(2,minmax(0,1fr))!important;gap:5px!important}
+            #${PANEL_ID} .qol-tribe-skins-choice{display:flex!important;align-items:center!important;justify-content:center!important;min-height:27px!important;padding:5px!important;border:1px solid #9c8668!important;border-radius:3px!important;background:#fff!important;color:#4a3821!important;cursor:pointer!important;font-size:9px!important;font-weight:700!important}
+            #${PANEL_ID} .qol-tribe-skins-choice:hover{background:#fff6e5!important}
+            #${PANEL_ID} .qol-tribe-skins-choice.qol-active{border-color:#487315!important;background:#679f22!important;color:#fff!important}
+            #${PANEL_ID} .qol-tribe-skins-current{margin:0!important;color:#746653!important;font-size:9px!important}
+            #${PANEL_ID} .qol-tribe-skins-preview-grid{display:grid!important;grid-template-columns:repeat(3,minmax(0,1fr))!important;gap:5px!important}
+            #${PANEL_ID} .qol-tribe-skins-preview{display:flex!important;flex-direction:column!important;align-items:center!important;gap:3px!important;min-height:83px!important;padding:5px!important;border:1px solid #d6cab8!important;border-radius:3px!important;background:#fff!important;color:#4a3821!important;font-size:8px!important;font-weight:700!important;text-align:center!important}
+            #${PANEL_ID} .qol-tribe-skins-preview img{display:block!important;width:76px!important;height:49px!important;max-width:100%!important;object-fit:contain!important}
+            #${PANEL_ID} .qol-tribe-skins-preview small{color:#89765d!important;font-size:7px!important;font-weight:400!important}
         `;
         document.head.appendChild(style);
     }
@@ -199,8 +310,17 @@
                     <div class="qol-tribe-skins-close" data-close role="button" tabindex="0" aria-label="Close">×</div>
                 </div>
                 <div class="qol-tribe-skins-body">
-                    <p class="qol-tribe-skins-copy">Collects Travian’s public building artwork so future tribe skins can use each tribe’s matching building appearance.</p>
-                    <div class="qol-tribe-skins-action" data-build role="button" tabindex="0">Build Asset Catalogue</div>
+                    <p class="qol-tribe-skins-copy">Choose the artwork you want to see. This only changes your local building visuals.</p>
+                    <div class="qol-tribe-skins-choice-label">Display buildings as</div>
+                    <div class="qol-tribe-skins-choices">
+                        <div class="qol-tribe-skins-choice" data-skin="default" role="button" tabindex="0">Default</div>
+                        <div class="qol-tribe-skins-choice" data-skin="roman" role="button" tabindex="0">Roman</div>
+                        <div class="qol-tribe-skins-choice" data-skin="teuton" role="button" tabindex="0">Teuton</div>
+                        <div class="qol-tribe-skins-choice" data-skin="gaul" role="button" tabindex="0">Gaul</div>
+                    </div>
+                    <p class="qol-tribe-skins-current"></p>
+                    <div class="qol-tribe-skins-preview-grid"></div>
+                    <div class="qol-tribe-skins-action" data-build role="button" tabindex="0">Refresh Asset Catalogue</div>
                     <p class="qol-tribe-skins-status"></p>
                     <div class="qol-tribe-skins-action qol-secondary" data-copy role="button" tabindex="0">Copy Asset Catalogue</div>
                 </div>
@@ -216,6 +336,7 @@
             };
             activate(panel.querySelector('[data-close]'), () => panel.classList.remove('qol-tribe-skins-open'));
             activate(panel.querySelector('[data-build]'), () => discoverBuildingAssets(true));
+            panel.querySelectorAll('[data-skin]').forEach(control => activate(control, () => setSkinSelection(control.dataset.skin)));
             activate(panel.querySelector('[data-copy]'), async event => {
                 const copyControl = event.currentTarget;
                 try {
@@ -229,6 +350,8 @@
             document.body.appendChild(panel);
         }
         panel.querySelector('.qol-tribe-skins-status').textContent = latestStatus;
+        refreshSkinUi();
+        applySelectedSkin();
         window.qolRepositionAllButtons?.();
     }
 
@@ -439,6 +562,7 @@
                 requestAnimationFrame(() => {
                     scheduled = false;
                     inspectPerformanceResources();
+                    applySelectedSkin();
                 });
             }
         });

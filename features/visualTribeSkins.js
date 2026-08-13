@@ -448,6 +448,7 @@
             server.capturedAt = server.buildingProbe.completedAt;
             saveCatalogue(catalogue);
             setStatus('Building artwork catalogue ready. ' + server.buildingProbe.found + ' files found.');
+            refreshSkinUi();
             console.info('[APES Visual Tribe Skins] Building catalogue complete.', server.buildingProbe);
         } finally {
             probeInProgress = false;

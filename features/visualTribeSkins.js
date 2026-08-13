@@ -12,11 +12,15 @@
     const FEATURE_KEY = 'visualTribeSkins';
     const STORAGE_KEY = 'apes_visual_tribe_skin_assets_v1';
     const MAX_ASSETS = 4000;
+    const BUILDING_IDS = Array.from({ length: 60 }, (_, index) => index + 1);
+    const TRIBE_VARIANTS = ['t00', 't10', 't20', 't30', 't40', 't50'];
+    const PROBE_CONCURRENCY = 4;
     const observedNodes = new WeakSet();
     let observer = null;
     let scheduled = false;
     let catalogueCache = null;
     let saveTimer = null;
+    let probeInProgress = false;
 
     function enabled() {
         return typeof window.isQolEnabled !== 'function' || window.isQolEnabled(FEATURE_KEY);
@@ -127,6 +131,110 @@
         saveCatalogue(catalogue);
     }
 
+    function setStatus(message) {
+        const description = document.querySelector('[data-feature-key="' + FEATURE_KEY + '"] .qol-feature-desc');
+        if (description) description.textContent = message;
+    }
+
+    function getProbeBaseUrl() {
+        const server = loadCatalogue()[serverKey()];
+        const assetUrls = Object.keys(server?.assets || {});
+        const buildingUrl = assetUrls.find(url => /\/layout\/images\/building\/thumb\//i.test(url));
+        if (buildingUrl) return buildingUrl.split('/layout/images/building/thumb/')[0] + '/layout/images/building/thumb/';
+
+        const staticUrl = assetUrls.find(url => /static\.kingdoms\.com\/game\/[^/]+\//i.test(url));
+        const match = staticUrl?.match(/^(https:\/\/static\.kingdoms\.com\/game\/[^/]+)\//i);
+        return match ? match[1] + '/layout/images/building/thumb/' : '';
+    }
+
+    function imageExists(url, timeoutMs = 7000) {
+        return new Promise(resolve => {
+            const image = new Image();
+            let settled = false;
+            const finish = exists => {
+                if (settled) return;
+                settled = true;
+                clearTimeout(timer);
+                image.onload = null;
+                image.onerror = null;
+                resolve(exists);
+            };
+            const timer = setTimeout(() => finish(false), timeoutMs);
+            image.onload = () => finish(true);
+            image.onerror = () => finish(false);
+            image.src = url;
+        });
+    }
+
+    async function discoverBuildingAssets() {
+        if (probeInProgress || !enabled()) return;
+
+        const catalogue = loadCatalogue();
+        const key = serverKey();
+        const server = catalogue[key] || { capturedAt: '', assets: {} };
+        if (server.buildingProbe?.status === 'complete') {
+            setStatus('Building artwork catalogue ready. ' + server.buildingProbe.found + ' files found.');
+            return;
+        }
+
+        const baseUrl = getProbeBaseUrl();
+        if (!baseUrl) {
+            setStatus('Open Village View once so APES can find this game world’s asset version.');
+            return;
+        }
+
+        probeInProgress = true;
+        const candidates = [];
+        BUILDING_IDS.forEach(buildingId => {
+            candidates.push({ url: baseUrl + 'g' + buildingId + '.png', buildingId, variant: 'shared' });
+            TRIBE_VARIANTS.forEach(variant => {
+                candidates.push({ url: baseUrl + 'g' + buildingId + '_' + variant + '.png', buildingId, variant });
+            });
+        });
+
+        server.buildingProbe = {
+            status: 'running',
+            total: candidates.length,
+            checked: 0,
+            found: 0,
+            startedAt: new Date().toISOString(),
+            completedAt: null
+        };
+        catalogue[key] = server;
+        saveCatalogue(catalogue);
+        setStatus('Collecting tribe building artwork… 0/' + candidates.length);
+
+        let cursor = 0;
+        const worker = async () => {
+            while (cursor < candidates.length) {
+                const candidate = candidates[cursor++];
+                const exists = await imageExists(candidate.url);
+                server.buildingProbe.checked += 1;
+                if (exists) {
+                    addAsset(candidate.url, null, 'building-catalogue-probe');
+                    server.buildingProbe.found += 1;
+                }
+                if (server.buildingProbe.checked % 16 === 0 || server.buildingProbe.checked === candidates.length) {
+                    server.capturedAt = new Date().toISOString();
+                    saveCatalogue(catalogue);
+                    setStatus('Collecting tribe building artwork… ' + server.buildingProbe.checked + '/' + candidates.length);
+                }
+            }
+        };
+
+        try {
+            await Promise.all(Array.from({ length: PROBE_CONCURRENCY }, worker));
+            server.buildingProbe.status = 'complete';
+            server.buildingProbe.completedAt = new Date().toISOString();
+            server.capturedAt = server.buildingProbe.completedAt;
+            saveCatalogue(catalogue);
+            setStatus('Building artwork catalogue ready. ' + server.buildingProbe.found + ' files found.');
+            console.info('[APES Visual Tribe Skins] Building catalogue complete.', server.buildingProbe);
+        } finally {
+            probeInProgress = false;
+        }
+    }
+
     function describe(element) {
         if (!(element instanceof Element)) return '';
         const tag = element.tagName.toLowerCase();
@@ -216,6 +324,7 @@
     function start() {
         if (observer || !enabled()) return;
         capture('initial');
+        setTimeout(discoverBuildingAssets, 800);
 
         observer = new MutationObserver(mutations => {
             if (!enabled()) return;
@@ -251,6 +360,7 @@
         if (event.detail.enabled) {
             start();
             capture('feature-enabled');
+            setTimeout(discoverBuildingAssets, 250);
         }
     });
 

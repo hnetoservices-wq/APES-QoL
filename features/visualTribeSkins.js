@@ -147,28 +147,48 @@
         return String(element?.textContent || '').replace(/\s+/g, ' ').trim();
     }
 
-    function parseBuildingId(image) {
-        const classText = String(image.className || '');
+    function getBuildingClassText(...elements) {
+        return elements
+            .filter(Boolean)
+            .map(element => String(element.className || ''))
+            .join(' ');
+    }
+
+    function parseBuildingId(...elements) {
+        const classText = getBuildingClassText(...elements);
         const idMatch = classText.match(/buildingId(\d+)/i);
         const typeMatch = classText.match(/buildingTypeg(\d+)/i);
         return Number(idMatch?.[1] || typeMatch?.[1] || 0) || null;
     }
 
-    function findBuildingLevel(image) {
-        const checks = [
-            image.getAttribute('data-level'),
-            image.getAttribute('data-building-level'),
-            image.closest('[data-level]')?.getAttribute('data-level'),
-            image.closest('[data-building-level]')?.getAttribute('data-building-level')
-        ];
+    function findBuildingLevel(image, anchor) {
+        const slotMatch = String(image.id || anchor?.id || '').match(/buildingImage(\d+)/i);
+        const slotId = slotMatch?.[1];
+        const nearby = [
+            image,
+            anchor,
+            image.parentElement,
+            anchor?.parentElement,
+            image.closest('[id*="location" i],[class*="location" i]'),
+            slotId ? document.getElementById('buildingLevel' + slotId) : null,
+            slotId ? document.getElementById('level' + slotId) : null
+        ].filter(Boolean);
 
-        const scope = image.parentElement?.parentElement || image.parentElement;
-        scope?.querySelectorAll?.('[class*="level" i],[id*="level" i],[data-level]').forEach(element => {
-            checks.push(element.getAttribute('data-level'), textOf(element));
+        const candidates = [];
+        nearby.forEach(element => {
+            candidates.push(
+                element.getAttribute?.('data-level'),
+                element.getAttribute?.('data-building-level'),
+                element.getAttribute?.('aria-label'),
+                element.getAttribute?.('title')
+            );
+            element.querySelectorAll?.('[data-level],[data-building-level],[class*="level" i],[id*="level" i]').forEach(child => {
+                candidates.push(child.getAttribute('data-level'), child.getAttribute('data-building-level'), textOf(child));
+            });
         });
 
-        for (const value of checks) {
-            const match = String(value || '').match(/\b([0-9]{1,2})\b/);
+        for (const value of candidates) {
+            const match = String(value || '').match(/\b(?:level\s*)?([0-9]{1,2})\b/i);
             if (match) return Number(match[1]);
         }
         return null;
@@ -178,19 +198,24 @@
         const catalogue = loadCatalogue();
         const key = serverKey();
         const server = catalogue[key] || { capturedAt: '', assets: {} };
+        const seenImages = new Set();
         const entries = [];
 
-        document.querySelectorAll('img.location').forEach(image => {
-            const buildingId = parseBuildingId(image);
+        document.querySelectorAll('img[id^="buildingImage"],img.location,[class*="buildingId" i],[class*="buildingTypeg" i]').forEach(anchor => {
+            const image = anchor instanceof HTMLImageElement ? anchor : anchor.querySelector?.('img');
+            if (!(image instanceof HTMLImageElement) || seenImages.has(image)) return;
+            seenImages.add(image);
+
+            const buildingId = parseBuildingId(image, anchor);
             if (!buildingId) return;
 
             const computed = getComputedStyle(image);
             const parent = image.parentElement;
             entries.push({
-                slotId: image.id || null,
+                slotId: image.id || anchor.id || null,
                 buildingId,
-                buildingType: [...image.classList].find(name => /^buildingType/i.test(name)) || null,
-                level: findBuildingLevel(image),
+                buildingType: getBuildingClassText(image, anchor).match(/buildingType[^\s]+/i)?.[0] || null,
+                level: findBuildingLevel(image, anchor),
                 src: image.dataset.qolTribeSkinOriginal || image.currentSrc || image.src,
                 displayedSrc: image.currentSrc || image.src,
                 imageSize: { naturalWidth: image.naturalWidth, naturalHeight: image.naturalHeight },

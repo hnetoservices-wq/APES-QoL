@@ -13,12 +13,13 @@
     const STORAGE_KEY = 'apes_visual_tribe_skin_assets_v1';
     const MAX_ASSETS = 4000;
     const BUILDING_IDS = Array.from({ length: 60 }, (_, index) => index + 1);
-    const TRIBE_VARIANTS = ['r00', 'g00', 't00', 't10'];
+    const LEVEL_TIERS = [0, 10, 20];
+    const TRIBE_VARIANTS = ['r', 'g', 't'].flatMap(prefix => LEVEL_TIERS.map(tier => prefix + String(tier).padStart(2, '0')));
     const PROBE_CONCURRENCY = 4;
     const TOOLBAR_BUTTON_ID = 'qol-tribe-skins-toggle-btn';
     const PANEL_ID = 'qol-tribe-skins-panel';
     const SKIN_SELECTION_KEY = 'apes_visual_tribe_skin_selection_v1';
-    const SKIN_VARIANTS = { roman: 'r00', teuton: 't10', gaul: 'g00' };
+    const SKIN_VARIANTS = { roman: 'r', teuton: 't', gaul: 'g' };
     const observedNodes = new WeakSet();
     let observer = null;
     let scheduled = false;
@@ -26,7 +27,6 @@
     let saveTimer = null;
     let probeInProgress = false;
     let latestStatus = 'Ready to collect building artwork from Travian.';
-    const TEUTON_SPECIAL_VARIANTS = { 13: 't00', 16: 't00', 46: 't00' };
 
     function enabled() {
         return typeof window.isQolEnabled !== 'function' || window.isQolEnabled(FEATURE_KEY);
@@ -327,9 +327,14 @@
         }
     }
 
-    function getTargetVariant(buildingId, choice) {
-        if (choice === 'teuton') return TEUTON_SPECIAL_VARIANTS[buildingId] || 't10';
-        return SKIN_VARIANTS[choice] || '';
+    function getTargetVariant(choice, level, originalUrl) {
+        const prefix = SKIN_VARIANTS[choice];
+        if (!prefix) return '';
+
+        const sourceTier = String(originalUrl || '').match(/_[rgt](\d+)\.png(?:[?#]|$)/i);
+        const numericLevel = Number.isInteger(level) ? level : Number(sourceTier?.[1] || 0);
+        const tier = Math.max(0, Math.min(20, Math.floor(numericLevel / 10) * 10));
+        return prefix + String(tier).padStart(2, '0');
     }
 
     function applySelectedSkin() {
@@ -348,8 +353,8 @@
 
             const match = targetPathMatch(original);
             if (!match) return;
-            const targetVariant = getTargetVariant(Number(match[1]), choice);
-            if (image.dataset.qolTribeSkinFailed === targetVariant) return;
+            const targetVariant = getTargetVariant(choice, findBuildingLevel(image, image), original);
+            if (!targetVariant || image.dataset.qolTribeSkinFailed === targetVariant) return;
 
             const target = new URL(original, location.href);
             target.pathname = target.pathname.replace(/_[a-z]\d+(\.png)$/i, '_' + targetVariant + '$1');
@@ -366,15 +371,15 @@
     }
 
     function previewHtml(tribe, variant) {
-        const stable = getPreviewAsset(20, variant);
-        const barracks = getPreviewAsset(19, variant);
+        const stable = getPreviewAsset(20, variant + '10') || getPreviewAsset(20, variant + '00');
+        const barracks = getPreviewAsset(19, variant + '10') || getPreviewAsset(19, variant + '00');
         const image = stable || barracks;
         const name = tribe[0].toUpperCase() + tribe.slice(1);
         return `
             <div class="qol-tribe-skins-preview" data-preview="${tribe}">
                 <div>${name}</div>
                 ${image ? '<img src="' + image.replace(/"/g, '&quot;') + '" alt="' + name + ' building preview">' : '<span>Artwork unavailable</span>'}
-                <small>${variant}</small>
+                <small>${variant}00–${variant}20</small>
             </div>
         `;
     }

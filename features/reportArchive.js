@@ -966,6 +966,17 @@
                     .7s ease!important;
             }
 
+            #qol-report-archive-panel .qol-ra-building-name {
+                display:block!important;
+                margin:3px 0 1px!important;
+                color:#5b3d18!important;
+                font-size:10px!important;
+                font-weight:700!important;
+                line-height:12px!important;
+                text-align:center!important;
+                white-space:nowrap!important;
+            }
+
             @keyframes qol-ra-saved-pulse {
                 0% {
                     transform:scale(1);
@@ -3540,6 +3551,42 @@
         );
     }
 
+    const BUILDING_TYPE_NAMES = Object.freeze({
+        10: 'Granary',
+        11: 'Warehouse',
+        15: 'Main Building',
+        16: 'Rally Point',
+        17: 'Marketplace',
+        19: 'Barracks',
+        20: 'Stable',
+        21: 'Workshop',
+        22: 'Academy',
+        23: 'Treasury',
+        24: 'Town Hall',
+        25: 'Residence',
+        26: 'Palace',
+        46: 'Healing Tent'
+    });
+
+    function annotateArchivedBuildingNames(root) {
+        root?.querySelectorAll?.('.buildingsModule .buildingInfo').forEach(buildingInfo => {
+            if (buildingInfo.querySelector('.qol-ra-building-name')) return;
+
+            const icon = buildingInfo.querySelector('[class*="buildingType"]');
+            const type = Number(
+                [...(icon?.classList || [])]
+                    .find(className => /^buildingType\d+$/i.test(className))
+                    ?.replace(/\D/g, '')
+            );
+            if (!Number.isInteger(type)) return;
+
+            const label = document.createElement('span');
+            label.className = 'qol-ra-building-name';
+            label.textContent = BUILDING_TYPE_NAMES[type] || ('Building #' + type);
+            icon?.insertAdjacentElement('afterend', label);
+        });
+    }
+
     function sanitizeStoredHtml(html) {
         const template =
             document.createElement(
@@ -3550,6 +3597,10 @@
             String(html || '');
 
         sanitizeSnapshot(
+            template.content
+        );
+
+        annotateArchivedBuildingNames(
             template.content
         );
 

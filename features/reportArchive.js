@@ -966,15 +966,72 @@
                     .7s ease!important;
             }
 
+            #qol-report-archive-panel .buildingsModule {
+                margin:7px 0 9px!important;
+                padding:7px 8px!important;
+                border:1px solid #d6c8ae!important;
+                border-radius:4px!important;
+                background:#fffaf0!important;
+            }
+
+            #qol-report-archive-panel .buildingsModule > .caption {
+                display:block!important;
+                margin:0 0 6px!important;
+                color:#5a3f1e!important;
+                font-size:11px!important;
+                font-weight:700!important;
+            }
+
+            #qol-report-archive-panel .buildingsContainer {
+                display:flex!important;
+                flex-wrap:wrap!important;
+                gap:7px!important;
+            }
+
+            #qol-report-archive-panel .buildingsContainer .buildingInfo {
+                display:flex!important;
+                flex:0 1 150px!important;
+                flex-direction:column!important;
+                align-items:center!important;
+                justify-content:center!important;
+                min-width:128px!important;
+                min-height:52px!important;
+                margin:0!important;
+                padding:6px 9px!important;
+                border:1px solid #d9c8a7!important;
+                border-radius:4px!important;
+                background:#f7efdd!important;
+                box-sizing:border-box!important;
+                text-align:center!important;
+            }
+
             #qol-report-archive-panel .qol-ra-building-name {
                 display:block!important;
-                margin:3px 0 1px!important;
+                margin:0 0 5px!important;
                 color:#5b3d18!important;
-                font-size:10px!important;
+                font-size:11px!important;
                 font-weight:700!important;
-                line-height:12px!important;
-                text-align:center!important;
+                line-height:13px!important;
                 white-space:nowrap!important;
+            }
+
+            #qol-report-archive-panel .qol-ra-building-levels {
+                display:flex!important;
+                align-items:center!important;
+                justify-content:center!important;
+                gap:5px!important;
+                color:#5c4934!important;
+                font-size:11px!important;
+                line-height:13px!important;
+            }
+
+            #qol-report-archive-panel .qol-ra-building-arrow {
+                color:#876333!important;
+                font-weight:700!important;
+            }
+
+            #qol-report-archive-panel .qol-ra-building-final {
+                color:#bd2f20!important;
             }
 
             @keyframes qol-ra-saved-pulse {
@@ -3570,7 +3627,7 @@
 
     function annotateArchivedBuildingNames(root) {
         root?.querySelectorAll?.('.buildingsModule .buildingInfo').forEach(buildingInfo => {
-            if (buildingInfo.querySelector('.qol-ra-building-name')) return;
+            if (buildingInfo.dataset.qolRaBuildingCard === 'true') return;
 
             const icon = buildingInfo.querySelector('[class*="buildingType"]');
             const type = Number(
@@ -3580,10 +3637,38 @@
             );
             if (!Number.isInteger(type)) return;
 
-            const label = document.createElement('span');
-            label.className = 'qol-ra-building-name';
-            label.textContent = BUILDING_TYPE_NAMES[type] || ('Building #' + type);
-            icon?.insertAdjacentElement('afterend', label);
+            const levelBlock = buildingInfo.querySelector('div');
+            const finalLevel = normalizeText(
+                levelBlock?.querySelector('.finalLevel')?.textContent
+            ) || '0';
+            const initialLevel = normalizeText(
+                [...(levelBlock?.childNodes || [])]
+                    .filter(node => node.nodeType === Node.TEXT_NODE)
+                    .map(node => node.textContent)
+                    .join(' ')
+            ) || '?';
+            const buildingName =
+                BUILDING_TYPE_NAMES[type] || ('Building #' + type);
+
+            const name = document.createElement('span');
+            name.className = 'qol-ra-building-name';
+            name.textContent = buildingName;
+
+            const levels = document.createElement('span');
+            levels.className = 'qol-ra-building-levels';
+
+            const from = document.createElement('strong');
+            from.textContent = initialLevel;
+            const arrow = document.createElement('span');
+            arrow.className = 'qol-ra-building-arrow';
+            arrow.textContent = '→';
+            const to = document.createElement('strong');
+            to.className = 'qol-ra-building-final';
+            to.textContent = finalLevel;
+
+            levels.append(from, arrow, to);
+            buildingInfo.replaceChildren(name, levels);
+            buildingInfo.dataset.qolRaBuildingCard = 'true';
         });
     }
 

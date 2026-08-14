@@ -26,7 +26,7 @@
     let catalogueCache = null;
     let saveTimer = null;
     let probeInProgress = false;
-    let latestStatus = 'Ready. No asset scan is needed.';
+    let latestStatus = '';
 
     function enabled() {
         return typeof window.isQolEnabled !== 'function' || window.isQolEnabled(FEATURE_KEY);
@@ -485,7 +485,6 @@
                 </div>
                 <div class="qol-tribe-skins-body">
                     <p class="qol-tribe-skins-copy">Choose the artwork you want to see. This only changes your local building visuals.</p>
-                    <p class="qol-tribe-skins-copy">No scan is needed: APES uses the building IDs and level artwork already loaded in your current village.</p>
                     <div class="qol-tribe-skins-choice-label">Display buildings as</div>
                     <div class="qol-tribe-skins-choices">
                         <div class="qol-tribe-skins-choice" data-skin="default" role="button" tabindex="0">Default</div>
@@ -744,10 +743,15 @@
     window.addEventListener('qol_setting_changed', event => {
         if (event.detail?.key !== FEATURE_KEY) return;
         if (event.detail.enabled) {
+            // Disabling the feature hides the panel with an inline rule. Remove it
+            // before re-initialising so the existing panel can open again.
+            document.getElementById(PANEL_ID)?.style.removeProperty('display');
             start();
             capture('feature-enabled');
             injectToolUi();
+            applySelectedSkin();
         } else {
+            document.getElementById(PANEL_ID)?.classList.remove('qol-tribe-skins-open');
             document.getElementById(PANEL_ID)?.style.setProperty('display', 'none', 'important');
         }
     });

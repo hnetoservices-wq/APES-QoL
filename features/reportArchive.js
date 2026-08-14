@@ -3622,6 +3622,8 @@
         24: 'Town Hall',
         25: 'Residence',
         26: 'Palace',
+        27: 'Treasury',
+        32: 'Wall',
         46: 'Healing Tent'
     });
 

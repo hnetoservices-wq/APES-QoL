@@ -26,7 +26,7 @@
     let catalogueCache = null;
     let saveTimer = null;
     let probeInProgress = false;
-    let latestStatus = 'Ready to collect building artwork from Travian.';
+    let latestStatus = 'Ready. No asset scan is needed.';
 
     function enabled() {
         return typeof window.isQolEnabled !== 'function' || window.isQolEnabled(FEATURE_KEY);
@@ -314,9 +314,21 @@
     }
 
     function getPreviewAsset(buildingId, variant) {
-        const assets = loadCatalogue()[serverKey()]?.assets || {};
-        const suffix = '/g' + buildingId + '_' + variant + '.png';
-        return Object.keys(assets).find(url => cleanAssetUrl(url).endsWith(suffix)) || '';
+        // The currently visible village already tells us the exact static asset
+        // version. Build preview URLs from it; no catalogue scan is required.
+        const sourceImage = [...document.querySelectorAll('img.location[src*="/layout/images/building/thumb/"]')]
+            .find(image => targetPathMatch(image.dataset.qolTribeSkinOriginal || image.currentSrc || image.src));
+        const source = sourceImage?.dataset.qolTribeSkinOriginal || sourceImage?.currentSrc || sourceImage?.src;
+        if (!source) return '';
+
+        try {
+            const preview = new URL(source, location.href);
+            preview.pathname = preview.pathname.replace(/\/g\d+_[a-z]\d+(\.png)$/i, '/g' + buildingId + '_' + variant + '$1');
+            preview.search = '';
+            return preview.href;
+        } catch (_) {
+            return '';
+        }
     }
 
     function targetPathMatch(value) {
@@ -473,7 +485,7 @@
                 </div>
                 <div class="qol-tribe-skins-body">
                     <p class="qol-tribe-skins-copy">Choose the artwork you want to see. This only changes your local building visuals.</p>
-                    <div class="qol-tribe-skins-action qol-secondary" data-scan-levels role="button" tabindex="0">Scan Visible Building Levels</div>
+                    <p class="qol-tribe-skins-copy">No scan is needed: APES uses the building IDs and level artwork already loaded in your current village.</p>
                     <div class="qol-tribe-skins-choice-label">Display buildings as</div>
                     <div class="qol-tribe-skins-choices">
                         <div class="qol-tribe-skins-choice" data-skin="default" role="button" tabindex="0">Default</div>
@@ -483,9 +495,7 @@
                     </div>
                     <p class="qol-tribe-skins-current"></p>
                     <div class="qol-tribe-skins-preview-grid"></div>
-                    <div class="qol-tribe-skins-action" data-build role="button" tabindex="0">Refresh Asset Catalogue</div>
                     <p class="qol-tribe-skins-status"></p>
-                    <div class="qol-tribe-skins-action qol-secondary" data-copy role="button" tabindex="0">Copy Asset Catalogue</div>
                 </div>
             `;
             const activate = (element, handler) => {
@@ -498,19 +508,7 @@
                 });
             };
             activate(panel.querySelector('[data-close]'), () => panel.classList.remove('qol-tribe-skins-open'));
-            activate(panel.querySelector('[data-build]'), () => discoverBuildingAssets(true));
-            activate(panel.querySelector('[data-scan-levels]'), () => scanVisibleBuildingLevels());
             panel.querySelectorAll('[data-skin]').forEach(control => activate(control, () => setSkinSelection(control.dataset.skin)));
-            activate(panel.querySelector('[data-copy]'), async event => {
-                const copyControl = event.currentTarget;
-                try {
-                    await navigator.clipboard.writeText(JSON.stringify(getReport(), null, 2));
-                    copyControl.textContent = 'Catalogue copied';
-                    setTimeout(() => { copyControl.textContent = 'Copy Asset Catalogue'; }, 1800);
-                } catch (_) {
-                    copyControl.textContent = 'Clipboard blocked';
-                }
-            });
             document.body.appendChild(panel);
         }
         panel.querySelector('.qol-tribe-skins-status').textContent = latestStatus;

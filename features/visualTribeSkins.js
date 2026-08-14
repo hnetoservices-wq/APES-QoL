@@ -158,7 +158,11 @@
         const classText = getBuildingClassText(...elements);
         const idMatch = classText.match(/buildingId(\d+)/i);
         const typeMatch = classText.match(/buildingTypeg(\d+)/i);
-        return Number(idMatch?.[1] || typeMatch?.[1] || 0) || null;
+        const srcMatch = elements
+            .map(element => String(element?.currentSrc || element?.src || ''))
+            .join(' ')
+            .match(/\/g(\d+)(?:_[a-z0-9]+)?\.png(?:[?#]|$)/i);
+        return Number(idMatch?.[1] || typeMatch?.[1] || srcMatch?.[1] || 0) || null;
     }
 
     function findBuildingLevel(image, anchor) {
@@ -200,13 +204,31 @@
         const server = catalogue[key] || { capturedAt: '', assets: {} };
         const seenImages = new Set();
         const entries = [];
+        const diagnostics = {
+            totalImages: document.images?.length || 0,
+            candidateImages: 0,
+            nonBuildingSamples: []
+        };
 
-        document.querySelectorAll('img[id^="buildingImage"],img.location,[class*="buildingId" i],[class*="buildingTypeg" i]').forEach(anchor => {
-            const image = anchor instanceof HTMLImageElement ? anchor : anchor.querySelector?.('img');
-            if (!(image instanceof HTMLImageElement) || seenImages.has(image)) return;
+        Array.from(document.images || []).forEach(image => {
+            const sourceText = String(image.currentSrc || image.src || '');
+            const classText = String(image.className || '');
+            const isCandidate = /buildingImage|buildingId|buildingType|\/layout\/images\/building\//i.test(
+                String(image.id || '') + ' ' + classText + ' ' + sourceText
+            );
+
+            if (!isCandidate) {
+                if (diagnostics.nonBuildingSamples.length < 8) {
+                    diagnostics.nonBuildingSamples.push({ id: image.id || null, className: classText || null, src: sourceText });
+                }
+                return;
+            }
+
+            diagnostics.candidateImages += 1;
+            if (seenImages.has(image)) return;
             seenImages.add(image);
 
-            const buildingId = parseBuildingId(image, anchor);
+            const buildingId = parseBuildingId(image);
             if (!buildingId) return;
 
             const computed = getComputedStyle(image);
@@ -242,6 +264,7 @@
 
         server.levelMapping = {
             scannedAt: new Date().toISOString(),
+            diagnostics,
             entries
         };
         server.capturedAt = server.levelMapping.scannedAt;

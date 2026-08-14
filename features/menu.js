@@ -217,6 +217,56 @@ function featureCardHtml(feature) {
     `;
 }
 
+
+let isNormalizingFeatureSections = false;
+
+function normalizeFeatureSections(overlay = document.getElementById('qol-modal-overlay')) {
+    if (!overlay || isNormalizingFeatureSections) return;
+    isNormalizingFeatureSections = true;
+
+    try {
+        const sections = [
+            { gridId: 'qol-basic-feature-grid', countId: null, features: BASIC_FEATURES },
+            { gridId: 'qol-cosmetic-feature-grid', countId: null, features: COSMETIC_FEATURES },
+            { gridId: 'qol-advanced-feature-grid', countId: 'qol-advanced-feature-count', features: ADVANCED_FEATURES }
+        ];
+        const expected = new Map();
+        sections.forEach(section => section.features.forEach(feature => expected.set(feature.key, section)));
+
+        const seen = new Set();
+        overlay.querySelectorAll('.qol-feature-card[data-feature-key]').forEach(card => {
+            const key = card.dataset.featureKey;
+            const section = expected.get(key);
+            if (!section || seen.has(key)) {
+                card.remove();
+                return;
+            }
+
+            seen.add(key);
+            const targetGrid = overlay.querySelector('#' + section.gridId);
+            if (targetGrid && card.parentElement !== targetGrid) targetGrid.appendChild(card);
+        });
+
+        sections.forEach(section => {
+            const grid = overlay.querySelector('#' + section.gridId);
+            const count = section.countId ? overlay.querySelector('#' + section.countId) : null;
+            if (grid && count) count.textContent = grid.querySelectorAll('.qol-feature-card[data-feature-key]').length + ' tools';
+        });
+    } finally {
+        isNormalizingFeatureSections = false;
+    }
+}
+
+function observeFeatureSections(overlay) {
+    if (!overlay || overlay.dataset.qolFeatureSectionsObserved === 'true') return;
+    overlay.dataset.qolFeatureSectionsObserved = 'true';
+
+    const observer = new MutationObserver(() => {
+        requestAnimationFrame(() => normalizeFeatureSections(overlay));
+    });
+    observer.observe(overlay, { childList: true, subtree: true });
+}
+
 function keybindHtml(item) {
     const keys = item.keys.map(key => `<span class="qol-kbd">${escapeHtml(key)}</span>`).join('');
     const state = item.fixed
@@ -496,6 +546,7 @@ function openFullSettings() {
     closeToolbarDropdown();
     const overlay = document.getElementById('qol-modal-overlay');
     if (!overlay) return;
+    normalizeFeatureSections(overlay);
     window.dispatchEvent(new CustomEvent('qol_close_others', { detail: { source: 'menu' } }));
     overlay.style.setProperty('display', 'flex', 'important');
 }
@@ -761,9 +812,13 @@ function setupQolMenu() {
         overlay.id = 'qol-modal-overlay';
         overlay.innerHTML = buildSettingsMarkup();
         document.body.appendChild(overlay);
+        normalizeFeatureSections(overlay);
+        observeFeatureSections(overlay);
         bindMenuControls(overlay);
         bindMenuShell(overlay);
     } else {
+        normalizeFeatureSections(overlay);
+        observeFeatureSections(overlay);
         bindMenuControls(overlay);
     }
 

@@ -143,6 +143,91 @@
         if (status) status.textContent = message;
     }
 
+    function textOf(element) {
+        return String(element?.textContent || '').replace(/\s+/g, ' ').trim();
+    }
+
+    function parseBuildingId(image) {
+        const classText = String(image.className || '');
+        const idMatch = classText.match(/buildingId(\d+)/i);
+        const typeMatch = classText.match(/buildingTypeg(\d+)/i);
+        return Number(idMatch?.[1] || typeMatch?.[1] || 0) || null;
+    }
+
+    function findBuildingLevel(image) {
+        const checks = [
+            image.getAttribute('data-level'),
+            image.getAttribute('data-building-level'),
+            image.closest('[data-level]')?.getAttribute('data-level'),
+            image.closest('[data-building-level]')?.getAttribute('data-building-level')
+        ];
+
+        const scope = image.parentElement?.parentElement || image.parentElement;
+        scope?.querySelectorAll?.('[class*="level" i],[id*="level" i],[data-level]').forEach(element => {
+            checks.push(element.getAttribute('data-level'), textOf(element));
+        });
+
+        for (const value of checks) {
+            const match = String(value || '').match(/\b([0-9]{1,2})\b/);
+            if (match) return Number(match[1]);
+        }
+        return null;
+    }
+
+    function scanVisibleBuildingLevels() {
+        const catalogue = loadCatalogue();
+        const key = serverKey();
+        const server = catalogue[key] || { capturedAt: '', assets: {} };
+        const entries = [];
+
+        document.querySelectorAll('img.location').forEach(image => {
+            const buildingId = parseBuildingId(image);
+            if (!buildingId) return;
+
+            const computed = getComputedStyle(image);
+            const parent = image.parentElement;
+            entries.push({
+                slotId: image.id || null,
+                buildingId,
+                buildingType: [...image.classList].find(name => /^buildingType/i.test(name)) || null,
+                level: findBuildingLevel(image),
+                src: image.dataset.qolTribeSkinOriginal || image.currentSrc || image.src,
+                displayedSrc: image.currentSrc || image.src,
+                imageSize: { naturalWidth: image.naturalWidth, naturalHeight: image.naturalHeight },
+                render: {
+                    width: computed.width,
+                    height: computed.height,
+                    left: computed.left,
+                    top: computed.top,
+                    transform: computed.transform,
+                    objectPosition: computed.objectPosition,
+                    objectFit: computed.objectFit,
+                    backgroundPosition: computed.backgroundPosition,
+                    clipPath: computed.clipPath
+                },
+                parent: {
+                    tag: parent?.tagName?.toLowerCase() || null,
+                    id: parent?.id || null,
+                    className: parent?.className || null,
+                    style: parent?.getAttribute('style') || null
+                },
+                scannedAt: new Date().toISOString()
+            });
+        });
+
+        server.levelMapping = {
+            scannedAt: new Date().toISOString(),
+            entries
+        };
+        server.capturedAt = server.levelMapping.scannedAt;
+        catalogue[key] = server;
+        saveCatalogue(catalogue);
+
+        const knownLevels = entries.filter(entry => Number.isInteger(entry.level)).length;
+        setStatus('Level map captured: ' + entries.length + ' visible buildings, ' + knownLevels + ' level values found.');
+        return server.levelMapping;
+    }
+
     function getSkinSelection() {
         try {
             const choice = localStorage.getItem(SKIN_SELECTION_KEY) || 'default';
@@ -335,6 +420,7 @@
                 </div>
                 <div class="qol-tribe-skins-body">
                     <p class="qol-tribe-skins-copy">Choose the artwork you want to see. This only changes your local building visuals.</p>
+                    <div class="qol-tribe-skins-action qol-secondary" data-scan-levels role="button" tabindex="0">Scan Visible Building Levels</div>
                     <div class="qol-tribe-skins-choice-label">Display buildings as</div>
                     <div class="qol-tribe-skins-choices">
                         <div class="qol-tribe-skins-choice" data-skin="default" role="button" tabindex="0">Default</div>
@@ -360,6 +446,7 @@
             };
             activate(panel.querySelector('[data-close]'), () => panel.classList.remove('qol-tribe-skins-open'));
             activate(panel.querySelector('[data-build]'), () => discoverBuildingAssets(true));
+            activate(panel.querySelector('[data-scan-levels]'), () => scanVisibleBuildingLevels());
             panel.querySelectorAll('[data-skin]').forEach(control => activate(control, () => setSkinSelection(control.dataset.skin)));
             activate(panel.querySelector('[data-copy]'), async event => {
                 const copyControl = event.currentTarget;
@@ -543,6 +630,8 @@
             server: location.hostname,
             capturedAt: server.capturedAt || null,
             summary: { assets: assets.length, byTribe },
+            buildingProbe: server.buildingProbe || null,
+            levelMapping: server.levelMapping || null,
             assets
         };
     }

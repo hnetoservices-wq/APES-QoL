@@ -1751,7 +1751,6 @@
 
     function ensureUI() {
         if (!document.body) return;
-        ensureSettingsCard();
         if (!isEnabled()) return destroyUI();
         injectStyles();
         mountPanel();

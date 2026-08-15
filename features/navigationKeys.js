@@ -338,6 +338,27 @@ function clickInstantFinishButton(button) {
     button.dispatchEvent(new MouseEvent('click', options));
 }
 
+function findHoveredInstantFinishBubble() {
+    return Array.from(document.querySelectorAll('.buildingBubble.clickable:hover'))
+        .find(bubble =>
+            isVisibleNavigationTarget(bubble) &&
+            !bubble.classList.contains('disabled') &&
+            !bubble.querySelector('.colorLayer.notAtAll')
+        ) || null;
+}
+
+async function triggerInstantFinish() {
+    // On the village view, Travian exposes the hover action as the clickable
+    // building bubble itself. Prefer that target when the cursor is over it.
+    const bubble = findHoveredInstantFinishBubble();
+    if (bubble) {
+        clickInstantFinishButton(bubble);
+        return;
+    }
+
+    await triggerInstantFinishBuildingQueue();
+}
+
 async function triggerInstantFinishBuildingQueue() {
     const slot = findActiveBuildingQueueSlot();
     if (!slot) {
@@ -376,11 +397,11 @@ function ensureInstantFinishKeybindMenuEntry() {
     row.className = 'qol-keybind-item';
     row.innerHTML = `
         <div class="qol-key-combo"><span class="qol-kbd">B</span></div>
-        <span class="qol-keybind-action">Instant Finish Building Queue</span>
-        <label class="qol-switch" title="Toggle Instant Finish Building Queue shortcut">
+        <span class="qol-keybind-action">Instant Finish Building / Queue</span>
+        <label class="qol-switch" title="Toggle Instant Finish Building / Queue shortcut">
             <input type="checkbox" id="qol-chk-instant-finish" class="qol-checkbox">
             <span class="qol-switch-track" aria-hidden="true"></span>
-            <span class="qol-visually-hidden">Toggle Instant Finish Building Queue shortcut</span>
+            <span class="qol-visually-hidden">Toggle Instant Finish Building / Queue shortcut</span>
         </label>
     `;
 
@@ -467,7 +488,7 @@ function handleNavigation(code) {
 
         case 'KeyB':
             if (isKeybindEnabled('instantFinish')) {
-                void triggerInstantFinishBuildingQueue();
+                void triggerInstantFinish();
             }
             break;
 

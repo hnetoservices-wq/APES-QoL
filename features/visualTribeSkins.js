@@ -740,6 +740,11 @@
         });
     }
 
+    document.addEventListener('keydown', event => {
+        if (event.key !== 'Escape' || event.defaultPrevented) return;
+        document.getElementById(PANEL_ID)?.classList.remove('qol-tribe-skins-open');
+    });
+
     window.addEventListener('qol_setting_changed', event => {
         if (event.detail?.key !== FEATURE_KEY) return;
         if (event.detail.enabled) {

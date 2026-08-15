@@ -1120,7 +1120,7 @@
         const input = document.querySelector(`#${PLANNER_ID} .qol-cp-period-input`);
         const value = Number.parseFloat(input?.value || '1');
         if (!Number.isFinite(value) || value <= 0) return 1;
-        return Math.min(365, Math.max(0.25, value));
+        return Math.min(365, Math.max(1, value));
     }
 
     function getPlannerTargetSlot() {
@@ -1436,7 +1436,7 @@
                 </div>
                 <div class="qol-cp-period-control">
                     <strong>24/7 period</strong>
-                    <input type="number" class="qol-cp-period-input" min="0.25" max="365" step="0.25" value="1" aria-label="24/7 celebration planning period in days">
+                    <input type="number" class="qol-cp-period-input" min="1" max="365" step="1" value="30" aria-label="24/7 celebration planning period in days">
                     <span>days</span>
                     <span class="qol-cp-period-hint">Starts inside period count.</span>
                 </div>

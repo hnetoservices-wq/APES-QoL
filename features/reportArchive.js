@@ -245,8 +245,6 @@
 
         requestAnimationFrame(() => {
             integrationScheduled = false;
-
-            ensureMenuIntegration();
             installToolbarPositionHook();
             positionToolbarButton();
         });
@@ -5900,7 +5898,6 @@
 
     function initializeModule() {
         injectStyles();
-        ensureMenuIntegration();
         installToolbarPositionHook();
 
         integrationObserver =

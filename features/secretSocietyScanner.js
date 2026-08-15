@@ -386,6 +386,30 @@
         ok.addEventListener('keydown', event => { if (event.key === 'Enter' || event.key === ' ') close(); });
         document.body.appendChild(dialog); ok.focus();
     }
+    function deleteStoredScans() {
+        try {
+            const all = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}');
+            delete all[serverKey()];
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(all));
+        } catch (_) {
+            localStorage.removeItem(STORAGE_KEY);
+        }
+        renderPanel();
+    }
+
+    function confirmDeleteStoredScans() {
+        document.getElementById(DIALOG_ID)?.remove();
+        const dialog = document.createElement('div');
+        dialog.id = DIALOG_ID;
+        dialog.innerHTML = '<div class="qol-ss-dialog-card" role="dialog" aria-modal="true"><div class="qol-ss-dialog-title">Delete Secret Society data?</div><div class="qol-ss-dialog-message">This removes every Secret Society list saved by APES on this game server. It cannot be undone.</div><div class="qol-ss-dialog-actions"><div class="qol-ss-tab" data-ss-cancel role="button" tabindex="0">Cancel</div><div class="qol-ss-action" data-ss-confirm-delete role="button" tabindex="0">Delete data</div></div></div>';
+        const close = () => dialog.remove();
+        const cancel = dialog.querySelector('[data-ss-cancel]');
+        const confirm = dialog.querySelector('[data-ss-confirm-delete]');
+        cancel.addEventListener('click', close);
+        confirm.addEventListener('click', () => { deleteStoredScans(); close(); });
+        document.body.appendChild(dialog);
+        cancel.focus();
+    }
     function exportScanCsv(scan) {
         if (!scan) return;
         const quote = value => '"' + String(value == null ? '' : value).replace(/"/g, '""') + '"';
@@ -408,7 +432,7 @@
         }
 
         const body = panel.querySelector('.qol-ss-body');
-        body.innerHTML = '<div class="qol-ss-tabs">' + tabs + '</div><div class="qol-ss-toolbar"><input class="qol-ss-search" type="search" placeholder="Search members…" aria-label="Search Secret Society members"><div class="qol-ss-action" data-ss-export role="button" tabindex="0">Export CSV</div><div class="qol-ss-action" data-ss-refresh role="button" tabindex="0">Update</div></div><p class="qol-ss-summary">' + selected.members.length + ' members · scanned ' + new Date(selected.scannedAt).toLocaleString() + '</p><div class="qol-ss-table-wrap"><table class="qol-ss-table"><thead><tr>' + MEMBER_COLUMNS.map(column => '<th class="qol-ss-sort' + (memberSort.key === column.key ? ' qol-sort-' + memberSort.direction : '') + '" data-ss-sort="' + column.key + '" role="button" tabindex="0">' + column.label + '</th>').join('') + '</tr></thead><tbody></tbody></table></div>';
+        body.innerHTML = '<div class="qol-ss-tabs">' + tabs + '</div><div class="qol-ss-toolbar"><input class="qol-ss-search" type="search" placeholder="Search members…" aria-label="Search Secret Society members"><div class="qol-ss-action" data-ss-export role="button" tabindex="0">Export CSV</div><div class="qol-ss-action" data-ss-refresh role="button" tabindex="0">Update</div><div class="qol-ss-tab" data-ss-delete role="button" tabindex="0">Delete SS Data</div></div><p class="qol-ss-summary">' + selected.members.length + ' members · scanned ' + new Date(selected.scannedAt).toLocaleString() + '</p><div class="qol-ss-table-wrap"><table class="qol-ss-table"><thead><tr>' + MEMBER_COLUMNS.map(column => '<th class="qol-ss-sort' + (memberSort.key === column.key ? ' qol-sort-' + memberSort.direction : '') + '" data-ss-sort="' + column.key + '" role="button" tabindex="0">' + column.label + '</th>').join('') + '</tr></thead><tbody></tbody></table></div>';
 
         const renderRows = () => {
             const query = cleanText(body.querySelector('.qol-ss-search')?.value).toLowerCase();
@@ -420,6 +444,7 @@
         body.querySelectorAll('[data-ss-tab]').forEach(tab => tab.addEventListener('click', () => renderPanel(tab.dataset.ssTab)));
         body.querySelector('[data-ss-refresh]').addEventListener('click', () => updateStoredSociety(selected));
         body.querySelector('[data-ss-export]').addEventListener('click', () => exportScanCsv(selected));
+        body.querySelector('[data-ss-delete]').addEventListener('click', confirmDeleteStoredScans);
         body.querySelectorAll('[data-ss-sort]').forEach(header => {
             const sort = () => {
                 const key = header.dataset.ssSort;

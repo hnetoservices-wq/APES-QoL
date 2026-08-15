@@ -10,8 +10,10 @@
     const BUTTON_ID = 'qol-ss-scanner-toggle-btn';
     const PANEL_ID = 'qol-ss-scanner-panel';
     const NATIVE_SCAN_ID = 'qol-ss-native-scan';
+    const DIALOG_ID = 'qol-ss-dialog';
     const MAX_PAGES = 100;
     let scanInProgress = false;
+    let memberSort = { key: 'rank', direction: 'asc' };
     let observer = null;
 
     function enabled() {
@@ -78,6 +80,12 @@
             '.qol-ss-table-wrap{border:1px solid #cdbb9d!important;border-radius:4px!important;overflow:auto!important;background:#fff!important}',
             '.qol-ss-table{width:100%!important;border-collapse:collapse!important;font-size:10px!important}',
             '.qol-ss-table th{position:sticky!important;top:0!important;padding:7px 6px!important;background:#e5d4b8!important;color:#533b22!important;text-align:left!important;font-size:9px!important;text-transform:uppercase!important;z-index:1!important}',
+            '.qol-ss-sort{cursor:pointer!important;user-select:none!important}.qol-ss-sort:hover{background:#d7c29d!important}.qol-ss-sort::after{content:""!important;margin-left:4px!important}.qol-ss-sort.qol-sort-asc::after{content:"▲"!important}.qol-ss-sort.qol-sort-desc::after{content:"▼"!important}',
+            '#' + DIALOG_ID + '{position:fixed!important;inset:0!important;z-index:1000005!important;display:flex!important;align-items:center!important;justify-content:center!important;background:rgba(20,16,11,.56)!important}',
+            '.qol-ss-dialog-card{width:390px!important;max-width:calc(100vw - 36px)!important;border:3px solid #634d31!important;border-radius:7px!important;background:#f7f5f0!important;box-shadow:0 16px 42px rgba(0,0,0,.5)!important;color:#432f1d!important;font-family:Arial,Helvetica,sans-serif!important}',
+            '.qol-ss-dialog-title{padding:12px!important;background:linear-gradient(#6d5436,#4f3b24)!important;color:#fffaf0!important;font-weight:700!important;font-size:14px!important}',
+            '.qol-ss-dialog-message{padding:16px 14px!important;font-size:12px!important;line-height:1.45!important}',
+            '.qol-ss-dialog-actions{display:flex!important;justify-content:flex-end!important;padding:0 14px 14px!important}',
             '.qol-ss-table td{padding:7px 6px!important;border-top:1px solid #eadfce!important;color:#4d3824!important;white-space:nowrap!important}',
             '.qol-ss-table tr:hover td{background:#fff8e7!important}',
             '.qol-ss-native-scan{display:inline-flex!important;align-items:center!important;justify-content:center!important;min-height:25px!important;margin:7px 0!important;padding:4px 10px!important;border:1px solid #725634!important;border-radius:4px!important;background:linear-gradient(#f7efd9,#d9c59e)!important;color:#543f26!important;font:700 10px Arial,sans-serif!important;cursor:pointer!important}',
@@ -350,6 +358,43 @@
         }
     }
 
+    const MEMBER_COLUMNS = [
+        { key: 'rank', label: '#' }, { key: 'name', label: 'Player' }, { key: 'villages', label: 'Villages' },
+        { key: 'population', label: 'Population' }, { key: 'resourcesSent', label: 'Resources Sent' },
+        { key: 'troopsLostInDefense', label: 'Troops Lost in Defense' }, { key: 'troopsCurrentlyProvided', label: 'Troops Currently Provided' }
+    ];
+    function numericValue(value) {
+        const parsed = Number(String(value == null ? '' : value).replace(/[^0-9.-]/g, ''));
+        return Number.isFinite(parsed) ? parsed : null;
+    }
+    function sortedMembers(members) {
+        const multiplier = memberSort.direction === 'asc' ? 1 : -1;
+        return members.slice().sort((left, right) => {
+            const a = numericValue(left[memberSort.key]), b = numericValue(right[memberSort.key]);
+            if (a != null && b != null) return (a - b) * multiplier;
+            return String(left[memberSort.key] || '').localeCompare(String(right[memberSort.key] || ''), undefined, { numeric: true, sensitivity: 'base' }) * multiplier;
+        });
+    }
+    function showScannerDialog(title, message) {
+        document.getElementById(DIALOG_ID)?.remove();
+        const dialog = document.createElement('div');
+        dialog.id = DIALOG_ID;
+        dialog.innerHTML = '<div class="qol-ss-dialog-card" role="dialog" aria-modal="true"><div class="qol-ss-dialog-title">' + escapeHtml(title) + '</div><div class="qol-ss-dialog-message">' + escapeHtml(message) + '</div><div class="qol-ss-dialog-actions"><div class="qol-ss-action" role="button" tabindex="0">OK</div></div></div>';
+        const close = () => dialog.remove();
+        const ok = dialog.querySelector('.qol-ss-action');
+        ok.addEventListener('click', close);
+        ok.addEventListener('keydown', event => { if (event.key === 'Enter' || event.key === ' ') close(); });
+        document.body.appendChild(dialog); ok.focus();
+    }
+    function exportScanCsv(scan) {
+        if (!scan) return;
+        const quote = value => '"' + String(value == null ? '' : value).replace(/"/g, '""') + '"';
+        const rows = [MEMBER_COLUMNS.map(column => quote(column.label)).join(','), ...sortedMembers(scan.members).map(member => MEMBER_COLUMNS.map(column => quote(member[column.key])).join(','))];
+        const blob = new Blob([rows.join('\r\n')], { type: 'text/csv;charset=utf-8' });
+        const url = URL.createObjectURL(blob), link = document.createElement('a');
+        const safeName = String(scan.name || 'secret-society').replace(/[^a-z0-9_-]+/gi, '-').replace(/^-|-$/g, '');
+        link.href = url; link.download = 'APES-Secret-Society-' + safeName + '.csv'; document.body.appendChild(link); link.click(); link.remove(); setTimeout(() => URL.revokeObjectURL(url), 0);
+    }
     function renderPanel(selectedId) {
         const panel = document.getElementById(PANEL_ID);
         if (!panel) return;
@@ -363,17 +408,27 @@
         }
 
         const body = panel.querySelector('.qol-ss-body');
-        body.innerHTML = '<div class="qol-ss-tabs">' + tabs + '</div><div class="qol-ss-toolbar"><input class="qol-ss-search" type="search" placeholder="Search members…" aria-label="Search Secret Society members"><div class="qol-ss-action" data-ss-refresh role="button" tabindex="0">Update</div></div><p class="qol-ss-summary">' + selected.members.length + ' members · scanned ' + new Date(selected.scannedAt).toLocaleString() + '</p><div class="qol-ss-table-wrap"><table class="qol-ss-table"><thead><tr><th>#</th><th>Player</th><th>Villages</th><th>Population</th><th>Resources Sent</th><th>Troops Lost in Defense</th><th>Troops Currently Provided</th></tr></thead><tbody></tbody></table></div>';
+        body.innerHTML = '<div class="qol-ss-tabs">' + tabs + '</div><div class="qol-ss-toolbar"><input class="qol-ss-search" type="search" placeholder="Search members…" aria-label="Search Secret Society members"><div class="qol-ss-action" data-ss-export role="button" tabindex="0">Export CSV</div><div class="qol-ss-action" data-ss-refresh role="button" tabindex="0">Update</div></div><p class="qol-ss-summary">' + selected.members.length + ' members · scanned ' + new Date(selected.scannedAt).toLocaleString() + '</p><div class="qol-ss-table-wrap"><table class="qol-ss-table"><thead><tr>' + MEMBER_COLUMNS.map(column => '<th class="qol-ss-sort' + (memberSort.key === column.key ? ' qol-sort-' + memberSort.direction : '') + '" data-ss-sort="' + column.key + '" role="button" tabindex="0">' + column.label + '</th>').join('') + '</tr></thead><tbody></tbody></table></div>';
 
         const renderRows = () => {
             const query = cleanText(body.querySelector('.qol-ss-search')?.value).toLowerCase();
-            const rows = selected.members.filter(member => Object.values(member).join(' ').toLowerCase().includes(query)).map(member => '<tr><td>' + escapeHtml(member.rank) + '</td><td>' + escapeHtml(member.name) + '</td><td>' + escapeHtml(member.villages) + '</td><td>' + escapeHtml(member.population) + '</td><td>' + escapeHtml(member.resourcesSent) + '</td><td>' + escapeHtml(member.troopsLostInDefense) + '</td><td>' + escapeHtml(member.troopsCurrentlyProvided) + '</td></tr>').join('');
+            const rows = sortedMembers(selected.members.filter(member => Object.values(member).join(' ').toLowerCase().includes(query))).map(member => '<tr><td>' + escapeHtml(member.rank) + '</td><td>' + escapeHtml(member.name) + '</td><td>' + escapeHtml(member.villages) + '</td><td>' + escapeHtml(member.population) + '</td><td>' + escapeHtml(member.resourcesSent) + '</td><td>' + escapeHtml(member.troopsLostInDefense) + '</td><td>' + escapeHtml(member.troopsCurrentlyProvided) + '</td></tr>').join('');
             body.querySelector('tbody').innerHTML = rows || '<tr><td colspan="7">No matching members.</td></tr>';
         };
         renderRows();
         body.querySelector('.qol-ss-search').addEventListener('input', renderRows);
         body.querySelectorAll('[data-ss-tab]').forEach(tab => tab.addEventListener('click', () => renderPanel(tab.dataset.ssTab)));
         body.querySelector('[data-ss-refresh]').addEventListener('click', () => updateStoredSociety(selected));
+        body.querySelector('[data-ss-export]').addEventListener('click', () => exportScanCsv(selected));
+        body.querySelectorAll('[data-ss-sort]').forEach(header => {
+            const sort = () => {
+                const key = header.dataset.ssSort;
+                memberSort = { key, direction: memberSort.key === key && memberSort.direction === 'asc' ? 'desc' : 'asc' };
+                renderPanel(selected.id);
+            };
+            header.addEventListener('click', sort);
+            header.addEventListener('keydown', event => { if (event.key === 'Enter' || event.key === ' ') sort(); });
+        });
     }
 
     function injectPanel() {

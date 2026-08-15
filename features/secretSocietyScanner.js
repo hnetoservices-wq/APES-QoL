@@ -92,7 +92,7 @@
 
     function getSocietyRoot() {
         if (!isSecretSocietiesTabActive()) return null;
-        return document.querySelector('.loadedTab.tabSecretSociety.activeTab .secretSociety, .loadedTab.tabSecretSociety.currentTab .secretSociety, .secretSociety.defaultWindow');
+        return document.querySelector('.loadedTab.tabSecretSociety.activeTab .secretSociety, .loadedTab.tabSecretSociety.currentTab .secretSociety, .secretSociety.defaultWindow, .loadedTab.tabSecretSociety.activeTab, .loadedTab.tabSecretSociety.currentTab');
     }
 
     function getSocietyId(root) {
@@ -107,7 +107,7 @@
     }
 
     function getMembersTable(root) {
-        return root?.querySelector('table.memberList') || null;
+        return root?.querySelector('table.memberList') || document.querySelector('.loadedTab.tabSecretSociety.activeTab table.memberList, .loadedTab.tabSecretSociety.currentTab table.memberList') || null;
     }
 
     function getSocietyName(root) {
@@ -247,7 +247,10 @@
         button.addEventListener('keydown', event => {
             if (event.key === 'Enter' || event.key === ' ') activate(event);
         });
-        table.closest('.statisticsTable,.contentBox')?.before(button);
+        // The Society member table is inside a pagination wrapper, unlike Kingdom's statistics table.
+        // Insert at that wrapper so the button is always visibly above the Society member list.
+        const anchor = table.closest('[pagination], .paginated, .contentBox, .windowContent') || table;
+        anchor.before(button);
     }
 
     function showUpdateLock(message) {

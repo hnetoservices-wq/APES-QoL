@@ -8,7 +8,8 @@ const QOL_DEFAULT_DISABLED_FEATURES = new Set([
     'oasisScanner',
     'reportArchive',
     'watchlist',
-    'visualTribeSkins'
+    'visualTribeSkins',
+    'secretSocietyScanner'
 ]);
 
 window.isQolEnabled = function(key) {
@@ -139,6 +140,13 @@ const ADVANCED_FEATURES = [
         icon: '◎',
         description: 'Saves and organizes players for quick access to profiles, hero data and tracking information.'
     },
+    {
+        id: 'qol-chk-secret-society-scanner',
+        key: 'secretSocietyScanner',
+        name: 'Secret Society Scanner',
+        icon: 'SS',
+        description: 'Scans every Secret Society member page into one searchable APES list.'
+    },
 ];
 
 const KEYBINDS = [
@@ -168,6 +176,7 @@ const TOOLBAR_ITEMS = [
     { id: 'qol-oasis-toggle-btn', label: 'Oasis Scanner', key: 'oasisScanner' },
     { id: 'qol-report-archive-toggle', label: 'Report Archive', key: 'reportArchive' },
     { id: 'qol-cp-toggle-btn', label: 'CP Manager', key: 'cpManager' },
+    { id: 'qol-ss-scanner-toggle-btn', label: 'Secret Society Scanner', key: 'secretSocietyScanner' },
     { id: 'qol-tribe-skins-toggle-btn', label: 'Visual Tribe Skins', key: 'visualTribeSkins' }
 ];
 

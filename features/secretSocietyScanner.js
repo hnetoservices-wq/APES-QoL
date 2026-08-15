@@ -139,9 +139,41 @@
     }
 
     function currentPage(root) {
-        const page = root.querySelector('.tg-pagination .number.disabled a,.tg-pagination .number .disabled');
+        const routePage = String(location.hash || '').match(/\/cp:(\d+)\b/i);
+        if (routePage) return Number(routePage[1]);
+
+        const page = root?.querySelector('.tg-pagination .number.disabled, .tg-pagination .number.active, .tg-pagination [aria-current="page"]');
         const value = Number(cleanText(page?.textContent));
         return Number.isFinite(value) && value > 0 ? value : 1;
+    }
+
+    function totalPages(root) {
+        const pages = Array.from(root?.querySelectorAll('.tg-pagination .number') || [])
+            .map(item => Number(cleanText(item.textContent)))
+            .filter(value => Number.isFinite(value) && value > 0);
+        return Math.max(1, ...pages);
+    }
+
+    function pageRoute(page) {
+        const hash = String(location.hash || '');
+        return /\/cp:\d+\b/i.test(hash)
+            ? hash.replace(/\/cp:\d+\b/i, '/cp:' + page)
+            : hash.replace(/\/?$/, '') + '/cp:' + page;
+    }
+
+    async function openPage(page, root) {
+        if (currentPage(root) === page) return root;
+        const before = pageSignature(root);
+        const nextRoute = pageRoute(page);
+        if (location.hash !== nextRoute) location.hash = nextRoute;
+
+        const startedAt = Date.now();
+        while (Date.now() - startedAt < 5500) {
+            await new Promise(resolve => setTimeout(resolve, 100));
+            const activeRoot = getSocietyRoot();
+            if (activeRoot && getMembersTable(activeRoot) && pageSignature(activeRoot) !== before) return activeRoot;
+        }
+        return null;
     }
 
     function pageSignature(root) {
@@ -177,30 +209,47 @@
     }
 
     async function scanCurrentSociety() {
-        const root = getSocietyRoot();
+        let root = getSocietyRoot();
         if (!root || scanInProgress) return;
         scanInProgress = true;
-        const originalPage = currentPage(root);
-        const societyName = getSocietyName(root);
-        const societyId = getSocietyId(root);
-        const members = new Map();
+        const lock = showUpdateLock('Preparing Secret Society scan…');
 
         try {
-            for (let page = 1; page <= MAX_PAGES; page += 1) {
-                scanButtonState('Scanning page ' + page + '…', true);
+            // Always start from page 1. The game exposes the page as /cp:N in the route.
+            root = await openPage(1, root);
+            if (!root) throw new Error('Could not open page 1');
+
+            const societyName = getSocietyName(root);
+            const societyId = getSocietyId(root);
+            const expectedPages = totalPages(root);
+            const members = new Map();
+
+            for (let page = 1; page <= expectedPages; page += 1) {
+                lock.textContent = 'Scanning Secret Society… page ' + page + ' of ' + expectedPages;
+                scanButtonState('Scanning page ' + page + ' of ' + expectedPages + '…', true);
+
+                if (currentPage(root) !== page) throw new Error('Expected page ' + page);
                 extractMembers(root).forEach(member => members.set(member.playerId || member.name, member));
+
+                if (page === expectedPages) break;
                 const next = nextButton(root);
-                if (!next) break;
+                if (!next) throw new Error('Last page was not reached');
+
                 const before = pageSignature(root);
                 next.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, view: window }));
                 await waitForChange(root, before);
-                if (pageSignature(root) === before) break;
+                root = getSocietyRoot();
+                if (!root || pageSignature(root) === before || currentPage(root) !== page + 1) {
+                    throw new Error('Page ' + (page + 1) + ' did not load');
+                }
             }
+
+            if (currentPage(root) !== expectedPages) throw new Error('Scan stopped before the final page');
 
             const scan = {
                 id: societyId || societyName.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'secret-society',
                 societyId,
-                route: location.hash,
+                route: pageRoute(1),
                 name: societyName,
                 scannedAt: Date.now(),
                 members: Array.from(members.values()).sort((a, b) => Number.parseInt(a.rank, 10) - Number.parseInt(b.rank, 10))
@@ -212,10 +261,15 @@
             saveScans(scans);
             renderPanel(scan.id);
             scanButtonState('Scan complete · ' + scan.members.length + ' members', false);
+            lock.textContent = 'Scan complete · ' + scan.members.length + ' members';
+            setTimeout(() => lock.remove(), 700);
+        } catch (_) {
+            scanButtonState('Scan error · scan again', false);
+            lock.textContent = 'Scan incomplete. Please scan again.';
+            setTimeout(() => lock.remove(), 1800);
         } finally {
-            if (originalPage > 1) clickPage(root, originalPage);
             scanInProgress = false;
-            setTimeout(() => scanButtonState('Scan Secret Society', false), 1500);
+            setTimeout(() => scanButtonState('Scan Secret Society', false), 1800);
         }
     }
 

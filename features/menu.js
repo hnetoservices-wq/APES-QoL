@@ -8,8 +8,7 @@ const QOL_DEFAULT_DISABLED_FEATURES = new Set([
     'oasisScanner',
     'reportArchive',
     'watchlist',
-    'visualTribeSkins',
-    'secretSocietyScanner'
+    'visualTribeSkins'
 ]);
 
 window.isQolEnabled = function(key) {
@@ -140,13 +139,6 @@ const ADVANCED_FEATURES = [
         icon: '◎',
         description: 'Saves and organizes players for quick access to profiles, hero data and tracking information.'
     },
-    {
-        id: 'qol-chk-secret-society-scanner',
-        key: 'secretSocietyScanner',
-        name: 'Secret Society Scanner',
-        icon: 'SS',
-        description: 'Scans every Secret Society member page into one searchable APES list.'
-    },
 ];
 
 const KEYBINDS = [
@@ -176,7 +168,6 @@ const TOOLBAR_ITEMS = [
     { id: 'qol-oasis-toggle-btn', label: 'Oasis Scanner', key: 'oasisScanner' },
     { id: 'qol-report-archive-toggle', label: 'Report Archive', key: 'reportArchive' },
     { id: 'qol-cp-toggle-btn', label: 'CP Manager', key: 'cpManager' },
-    { id: 'qol-ss-scanner-toggle-btn', label: 'Secret Society Scanner', key: 'secretSocietyScanner' },
     { id: 'qol-tribe-skins-toggle-btn', label: 'Visual Tribe Skins', key: 'visualTribeSkins' }
 ];
 
@@ -224,46 +215,6 @@ function featureCardHtml(feature) {
             </label>
         </article>
     `;
-}
-
-
-let isNormalizingFeatureSections = false;
-
-function normalizeFeatureSections(overlay = document.getElementById('qol-modal-overlay')) {
-    if (!overlay || isNormalizingFeatureSections) return;
-    isNormalizingFeatureSections = true;
-
-    try {
-        const sections = [
-            { gridId: 'qol-basic-feature-grid', countId: null, features: BASIC_FEATURES },
-            { gridId: 'qol-cosmetic-feature-grid', countId: null, features: COSMETIC_FEATURES },
-            { gridId: 'qol-advanced-feature-grid', countId: 'qol-advanced-feature-count', features: ADVANCED_FEATURES }
-        ];
-        const expected = new Map();
-        sections.forEach(section => section.features.forEach(feature => expected.set(feature.key, section)));
-
-        const seen = new Set();
-        overlay.querySelectorAll('.qol-feature-card[data-feature-key]').forEach(card => {
-            const key = card.dataset.featureKey;
-            const section = expected.get(key);
-            if (!section || seen.has(key)) {
-                card.remove();
-                return;
-            }
-
-            seen.add(key);
-            const targetGrid = overlay.querySelector('#' + section.gridId);
-            if (targetGrid && card.parentElement !== targetGrid) targetGrid.appendChild(card);
-        });
-
-        sections.forEach(section => {
-            const grid = overlay.querySelector('#' + section.gridId);
-            const count = section.countId ? overlay.querySelector('#' + section.countId) : null;
-            if (grid && count) count.textContent = grid.querySelectorAll('.qol-feature-card[data-feature-key]').length + ' tools';
-        });
-    } finally {
-        isNormalizingFeatureSections = false;
-    }
 }
 
 function keybindHtml(item) {
@@ -545,7 +496,6 @@ function openFullSettings() {
     closeToolbarDropdown();
     const overlay = document.getElementById('qol-modal-overlay');
     if (!overlay) return;
-    normalizeFeatureSections(overlay);
     window.dispatchEvent(new CustomEvent('qol_close_others', { detail: { source: 'menu' } }));
     overlay.style.setProperty('display', 'flex', 'important');
 }
@@ -811,11 +761,9 @@ function setupQolMenu() {
         overlay.id = 'qol-modal-overlay';
         overlay.innerHTML = buildSettingsMarkup();
         document.body.appendChild(overlay);
-        normalizeFeatureSections(overlay);
         bindMenuControls(overlay);
         bindMenuShell(overlay);
     } else {
-        normalizeFeatureSections(overlay);
         bindMenuControls(overlay);
     }
 

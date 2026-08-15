@@ -130,9 +130,9 @@
                 playerId,
                 villages: cells[2] || '',
                 population: cells[3] || '',
-                fealty: cells[4] || '',
-                stat1: cells[5] || '',
-                stat2: cells[6] || '',
+                resourcesSent: cells[4] || '',
+                troopsLostInDefense: cells[5] || '',
+                troopsCurrentlyProvided: cells[6] || '',
                 values: cells
             };
         }).filter(member => member.name && member.name !== 'Unknown');
@@ -309,11 +309,11 @@
         }
 
         const body = panel.querySelector('.qol-ss-body');
-        body.innerHTML = '<div class="qol-ss-tabs">' + tabs + '</div><div class="qol-ss-toolbar"><input class="qol-ss-search" type="search" placeholder="Search members…" aria-label="Search Secret Society members"><div class="qol-ss-action" data-ss-refresh role="button" tabindex="0">Update</div></div><p class="qol-ss-summary">' + selected.members.length + ' members · scanned ' + new Date(selected.scannedAt).toLocaleString() + '</p><div class="qol-ss-table-wrap"><table class="qol-ss-table"><thead><tr><th>#</th><th>Player</th><th>Villages</th><th>Population</th><th>Fealty</th><th>Stat 1</th><th>Stat 2</th></tr></thead><tbody></tbody></table></div>';
+        body.innerHTML = '<div class="qol-ss-tabs">' + tabs + '</div><div class="qol-ss-toolbar"><input class="qol-ss-search" type="search" placeholder="Search members…" aria-label="Search Secret Society members"><div class="qol-ss-action" data-ss-refresh role="button" tabindex="0">Update</div></div><p class="qol-ss-summary">' + selected.members.length + ' members · scanned ' + new Date(selected.scannedAt).toLocaleString() + '</p><div class="qol-ss-table-wrap"><table class="qol-ss-table"><thead><tr><th>#</th><th>Player</th><th>Villages</th><th>Population</th><th>Resources Sent</th><th>Troops Lost in Defense</th><th>Troops Currently Provided</th></tr></thead><tbody></tbody></table></div>';
 
         const renderRows = () => {
             const query = cleanText(body.querySelector('.qol-ss-search')?.value).toLowerCase();
-            const rows = selected.members.filter(member => Object.values(member).join(' ').toLowerCase().includes(query)).map(member => '<tr><td>' + escapeHtml(member.rank) + '</td><td>' + escapeHtml(member.name) + '</td><td>' + escapeHtml(member.villages) + '</td><td>' + escapeHtml(member.population) + '</td><td>' + escapeHtml(member.fealty) + '</td><td>' + escapeHtml(member.stat1) + '</td><td>' + escapeHtml(member.stat2) + '</td></tr>').join('');
+            const rows = selected.members.filter(member => Object.values(member).join(' ').toLowerCase().includes(query)).map(member => '<tr><td>' + escapeHtml(member.rank) + '</td><td>' + escapeHtml(member.name) + '</td><td>' + escapeHtml(member.villages) + '</td><td>' + escapeHtml(member.population) + '</td><td>' + escapeHtml(member.resourcesSent) + '</td><td>' + escapeHtml(member.troopsLostInDefense) + '</td><td>' + escapeHtml(member.troopsCurrentlyProvided) + '</td></tr>').join('');
             body.querySelector('tbody').innerHTML = rows || '<tr><td colspan="7">No matching members.</td></tr>';
         };
         renderRows();

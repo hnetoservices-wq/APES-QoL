@@ -59,8 +59,9 @@
         const style = document.createElement('style');
         style.id = 'qol-ss-scanner-styles';
         style.textContent = [
-            '#' + BUTTON_ID + '{position:fixed!important;display:none;align-items:center!important;justify-content:center!important;width:30px!important;min-width:30px!important;max-width:30px!important;height:30px!important;min-height:30px!important;max-height:30px!important;line-height:26px!important;margin:0!important;padding:0!important;box-sizing:border-box!important;border:2px solid #7d6342!important;border-radius:50%!important;background:#ebdcb9!important;box-shadow:0 2px 4px rgba(0,0,0,.2)!important;color:#5a4024!important;font:700 15px Arial,sans-serif!important;cursor:pointer!important;z-index:999991!important;user-select:none!important}',
-            '#' + BUTTON_ID + ':hover{background:#fff7e7!important;transform:scale(1.08)!important}',
+            '#' + BUTTON_ID + '{position:fixed!important;display:none;align-items:center!important;justify-content:center!important;width:30px!important;height:30px!important;margin:0!important;padding:0!important;box-sizing:border-box!important;border:2px solid #7d6342!important;border-radius:50%!important;background:#ebdcb9!important;box-shadow:0 2px 4px rgba(0,0,0,.2)!important;cursor:pointer!important;user-select:none!important;transition:transform .2s ease,background-color .2s ease!important}',
+            '#' + BUTTON_ID + ':hover{transform:scale(1.1)!important;background:#f7f5f0!important}',
+            '#' + BUTTON_ID + ' svg{width:16px!important;height:16px!important;fill:none!important;stroke:#7d6342!important;stroke-width:1.8!important;stroke-linecap:round!important;stroke-linejoin:round!important;pointer-events:none!important}',
             '#' + PANEL_ID + '{position:fixed!important;right:18px!important;top:76px!important;z-index:1000002!important;display:none!important;width:680px!important;max-width:calc(100vw - 36px)!important;max-height:calc(100vh - 100px)!important;overflow:hidden!important;border:3px solid #634d31!important;border-radius:7px!important;background:#f7f5f0!important;box-shadow:0 16px 42px rgba(0,0,0,.5)!important;color:#432f1d!important;font-family:Arial,Helvetica,sans-serif!important}',
             '#' + PANEL_ID + '.qol-ss-open{display:flex!important;flex-direction:column!important}',
             '#' + PANEL_ID + ' *{box-sizing:border-box!important;font-family:Arial,Helvetica,sans-serif!important;text-shadow:none!important}',
@@ -327,7 +328,7 @@
             button.title = 'Secret Society Scanner';
             button.setAttribute('role', 'button');
             button.setAttribute('tabindex', '0');
-            button.textContent = '♜';
+            button.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 20h12"></path><path d="M8 20v-4h8v4"></path><path d="M7 5h10v5c0 3-2.2 5-5 5s-5-2-5-5z"></path><path d="M9 5V3h6v2"></path><path d="M9 9h6"></path></svg>';
             const toggle = event => {
                 event.preventDefault();
                 event.stopPropagation();

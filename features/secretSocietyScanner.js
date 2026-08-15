@@ -59,7 +59,7 @@
         const style = document.createElement('style');
         style.id = 'qol-ss-scanner-styles';
         style.textContent = [
-            '#' + BUTTON_ID + '{position:fixed!important;display:none;align-items:center!important;justify-content:center!important;width:30px!important;height:30px!important;margin:0!important;padding:0!important;border:2px solid #7d6342!important;border-radius:50%!important;background:#ebdcb9!important;box-shadow:0 2px 4px rgba(0,0,0,.2)!important;color:#5a4024!important;font:700 16px Arial,sans-serif!important;cursor:pointer!important;z-index:999991!important;user-select:none!important}',
+            '#' + BUTTON_ID + '{position:fixed!important;display:none;align-items:center!important;justify-content:center!important;width:30px!important;height:30px!important;margin:0!important;padding:0!important;border:2px solid #7d6342!important;border-radius:50%!important;background:#ebdcb9!important;box-shadow:0 2px 4px rgba(0,0,0,.2)!important;color:#5a4024!important;font:700 15px Arial,sans-serif!important;cursor:pointer!important;z-index:999991!important;user-select:none!important}',
             '#' + BUTTON_ID + ':hover{background:#fff7e7!important;transform:scale(1.08)!important}',
             '#' + PANEL_ID + '{position:fixed!important;right:18px!important;top:76px!important;z-index:1000002!important;display:none!important;width:680px!important;max-width:calc(100vw - 36px)!important;max-height:calc(100vh - 100px)!important;overflow:hidden!important;border:3px solid #634d31!important;border-radius:7px!important;background:#f7f5f0!important;box-shadow:0 16px 42px rgba(0,0,0,.5)!important;color:#432f1d!important;font-family:Arial,Helvetica,sans-serif!important}',
             '#' + PANEL_ID + '.qol-ss-open{display:flex!important;flex-direction:column!important}',
@@ -85,7 +85,13 @@
         document.head.appendChild(style);
     }
 
+    function isSecretSocietiesTabActive() {
+        return Array.from(document.querySelectorAll('.society .tab.active,.society .tab.currentTab,.society [class*="tab"].active'))
+            .some(tab => /secret\s*societ/i.test(cleanText(tab.textContent)));
+    }
+
     function getSocietyRoot() {
+        if (!isSecretSocietiesTabActive()) return null;
         const roots = Array.from(document.querySelectorAll('.society'));
         return roots.find(root => root.querySelector('.tg-pagination') && root.querySelector('tbody')) || null;
     }
@@ -204,10 +210,19 @@
     }
 
     function injectNativeScanButton() {
-        if (!enabled() || document.getElementById(NATIVE_SCAN_ID)) return;
+        const existing = document.getElementById(NATIVE_SCAN_ID);
+        if (!enabled()) {
+            existing?.remove();
+            return;
+        }
+
         const root = getSocietyRoot();
         const table = root && getMembersTable(root);
-        if (!root || !table) return;
+        if (!root || !table) {
+            existing?.remove();
+            return;
+        }
+        if (existing) return;
         const button = document.createElement('div');
         button.id = NATIVE_SCAN_ID;
         button.className = 'qol-ss-native-scan';
@@ -260,7 +275,7 @@
             button.title = 'Secret Society Scanner';
             button.setAttribute('role', 'button');
             button.setAttribute('tabindex', '0');
-            button.textContent = 'SS';
+            button.textContent = '♜';
             const toggle = event => {
                 event.preventDefault();
                 event.stopPropagation();

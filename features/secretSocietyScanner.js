@@ -59,7 +59,7 @@
         const style = document.createElement('style');
         style.id = 'qol-ss-scanner-styles';
         style.textContent = [
-            '#' + BUTTON_ID + '{position:fixed!important;display:none;align-items:center!important;justify-content:center!important;width:30px!important;height:30px!important;margin:0!important;padding:0!important;border:2px solid #7d6342!important;border-radius:50%!important;background:#ebdcb9!important;box-shadow:0 2px 4px rgba(0,0,0,.2)!important;color:#5a4024!important;font:700 15px Arial,sans-serif!important;cursor:pointer!important;z-index:999991!important;user-select:none!important}',
+            '#' + BUTTON_ID + '{position:fixed!important;display:none;align-items:center!important;justify-content:center!important;width:30px!important;min-width:30px!important;max-width:30px!important;height:30px!important;min-height:30px!important;max-height:30px!important;line-height:26px!important;margin:0!important;padding:0!important;border:2px solid #7d6342!important;border-radius:50%!important;background:#ebdcb9!important;box-shadow:0 2px 4px rgba(0,0,0,.2)!important;color:#5a4024!important;font:700 15px Arial,sans-serif!important;cursor:pointer!important;z-index:999991!important;user-select:none!important}',
             '#' + BUTTON_ID + ':hover{background:#fff7e7!important;transform:scale(1.08)!important}',
             '#' + PANEL_ID + '{position:fixed!important;right:18px!important;top:76px!important;z-index:1000002!important;display:none!important;width:680px!important;max-width:calc(100vw - 36px)!important;max-height:calc(100vh - 100px)!important;overflow:hidden!important;border:3px solid #634d31!important;border-radius:7px!important;background:#f7f5f0!important;box-shadow:0 16px 42px rgba(0,0,0,.5)!important;color:#432f1d!important;font-family:Arial,Helvetica,sans-serif!important}',
             '#' + PANEL_ID + '.qol-ss-open{display:flex!important;flex-direction:column!important}',
@@ -86,27 +86,33 @@
     }
 
     function isSecretSocietiesTabActive() {
-        return Array.from(document.querySelectorAll('.society .tab.active,.society .tab.currentTab,.society [class*="tab"].active'))
-            .some(tab => /secret\s*societ/i.test(cleanText(tab.textContent)));
+        return /tab:SecretSociety/i.test(location.hash || '');
     }
 
     function getSocietyRoot() {
         if (!isSecretSocietiesTabActive()) return null;
-        const roots = Array.from(document.querySelectorAll('.society'));
-        return roots.find(root => root.querySelector('.tg-pagination') && root.querySelector('tbody')) || null;
+        return document.querySelector('.loadedTab.tabSecretSociety.activeTab .secretSociety, .loadedTab.tabSecretSociety.currentTab .secretSociety, .secretSociety.defaultWindow');
+    }
+
+    function getSocietyId(root) {
+        const routeMatch = String(location.hash || '').match(/(?:societyId|ssId|groupId):([0-9]+)/i);
+        if (routeMatch) return routeMatch[1];
+
+        const activeTab = root?.querySelector('dynamic-tabulation[active-tab]');
+        if (activeTab?.getAttribute('active-tab')) return activeTab.getAttribute('active-tab');
+
+        const actionText = root?.querySelector('[clickable*="societyId"]')?.getAttribute('clickable') || '';
+        return actionText.match(/societyId['"]?\s*:\s*([0-9]+)/i)?.[1] || '';
     }
 
     function getMembersTable(root) {
-        return Array.from(root.querySelectorAll('table')).find(table => {
-            const rows = table.querySelectorAll('tbody tr');
-            return rows.length && Array.from(rows).some(row => row.hasAttribute('player-id') || row.querySelector('[player-name]'));
-        }) || null;
+        return root?.querySelector('table.memberList') || null;
     }
 
     function getSocietyName(root) {
-        const headings = Array.from(root.querySelectorAll('.contentBoxHeader .content,h1,h2,h3,.tab.active'));
-        const candidate = headings.map(node => cleanText(node.textContent)).find(text => text && text.length < 70);
-        return candidate || 'Secret Society';
+        const activeTab = root?.querySelector('.dynamicTabulation .tab.active .content span');
+        const heading = root?.querySelector('h6.headerWithIcon');
+        return cleanText(activeTab?.textContent || heading?.childNodes?.[2]?.textContent || heading?.textContent) || 'Secret Society';
     }
 
     function extractMembers(root) {
@@ -114,9 +120,9 @@
         if (!table) return [];
         return Array.from(table.querySelectorAll('tbody tr')).map(row => {
             const cells = Array.from(row.querySelectorAll('td')).map(cell => cleanText(cell.textContent));
-            const playerCell = row.querySelector('[player-name],.playerColumn');
-            const name = row.getAttribute('player-name') || playerCell?.getAttribute('player-name') || cleanText(playerCell?.textContent) || cells[1] || 'Unknown';
-            const playerId = row.getAttribute('player-id') || playerCell?.getAttribute('player-id') || '';
+            const playerCell = row.querySelector('[playername],[player-name],.playerColumn,.name .playerLink');
+            const name = row.getAttribute('player-name') || playerCell?.getAttribute('player-name') || playerCell?.getAttribute('playername') || cleanText(playerCell?.textContent) || cells[1] || 'Unknown';
+            const playerId = row.getAttribute('player-id') || playerCell?.getAttribute('player-id') || playerCell?.getAttribute('playerid') || '';
             return {
                 rank: cells[0] || '',
                 name,
@@ -175,6 +181,7 @@
         scanInProgress = true;
         const originalPage = currentPage(root);
         const societyName = getSocietyName(root);
+        const societyId = getSocietyId(root);
         const members = new Map();
 
         try {
@@ -190,10 +197,12 @@
             }
 
             const scan = {
-                id: societyName.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'secret-society',
+                id: societyId || societyName.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'secret-society',
+                societyId,
+                route: location.hash,
                 name: societyName,
                 scannedAt: Date.now(),
-                members: Array.from(members.values()).sort((a, b) => Number(a.rank || 0) - Number(b.rank || 0))
+                members: Array.from(members.values()).sort((a, b) => Number.parseInt(a.rank, 10) - Number.parseInt(b.rank, 10))
             };
             const scans = loadScans();
             const index = scans.findIndex(item => item.id === scan.id);
@@ -240,6 +249,49 @@
         table.closest('.statisticsTable,.contentBox')?.before(button);
     }
 
+    function showUpdateLock(message) {
+        let lock = document.getElementById('qol-ss-update-lock');
+        if (!lock) {
+            lock = document.createElement('div');
+            lock.id = 'qol-ss-update-lock';
+            lock.style.cssText = 'position:fixed!important;inset:0!important;z-index:1000003!important;display:flex!important;align-items:center!important;justify-content:center!important;background:rgba(20,16,11,.52)!important;color:#fffaf0!important;font:700 13px Arial,sans-serif!important;text-align:center!important';
+            document.body.appendChild(lock);
+        }
+        lock.textContent = message;
+        return lock;
+    }
+
+    function waitForSecretSociety(timeout = 8000) {
+        return new Promise(resolve => {
+            const startedAt = Date.now();
+            const timer = setInterval(() => {
+                const root = getSocietyRoot();
+                if ((root && getMembersTable(root)) || Date.now() - startedAt >= timeout) {
+                    clearInterval(timer);
+                    resolve(root);
+                }
+            }, 100);
+        });
+    }
+
+    async function updateStoredSociety(scan) {
+        if (!scan) return;
+        const lock = showUpdateLock('Opening Secret Society…');
+        try {
+            if (scan.route && location.hash !== scan.route) location.hash = scan.route;
+            const root = await waitForSecretSociety();
+            if (!root) {
+                lock.textContent = 'Could not open this Secret Society.';
+                setTimeout(() => lock.remove(), 1600);
+                return;
+            }
+            lock.textContent = 'Scanning Secret Society…';
+            await scanCurrentSociety();
+        } finally {
+            lock.remove();
+        }
+    }
+
     function renderPanel(selectedId) {
         const panel = document.getElementById(PANEL_ID);
         if (!panel) return;
@@ -253,7 +305,7 @@
         }
 
         const body = panel.querySelector('.qol-ss-body');
-        body.innerHTML = '<div class="qol-ss-tabs">' + tabs + '</div><div class="qol-ss-toolbar"><input class="qol-ss-search" type="search" placeholder="Search members…" aria-label="Search Secret Society members"><div class="qol-ss-action" data-ss-refresh role="button" tabindex="0">Refresh display</div></div><p class="qol-ss-summary">' + selected.members.length + ' members · scanned ' + new Date(selected.scannedAt).toLocaleString() + '</p><div class="qol-ss-table-wrap"><table class="qol-ss-table"><thead><tr><th>#</th><th>Player</th><th>Villages</th><th>Population</th><th>Fealty</th><th>Stat 1</th><th>Stat 2</th></tr></thead><tbody></tbody></table></div>';
+        body.innerHTML = '<div class="qol-ss-tabs">' + tabs + '</div><div class="qol-ss-toolbar"><input class="qol-ss-search" type="search" placeholder="Search members…" aria-label="Search Secret Society members"><div class="qol-ss-action" data-ss-refresh role="button" tabindex="0">Update</div></div><p class="qol-ss-summary">' + selected.members.length + ' members · scanned ' + new Date(selected.scannedAt).toLocaleString() + '</p><div class="qol-ss-table-wrap"><table class="qol-ss-table"><thead><tr><th>#</th><th>Player</th><th>Villages</th><th>Population</th><th>Fealty</th><th>Stat 1</th><th>Stat 2</th></tr></thead><tbody></tbody></table></div>';
 
         const renderRows = () => {
             const query = cleanText(body.querySelector('.qol-ss-search')?.value).toLowerCase();
@@ -263,7 +315,7 @@
         renderRows();
         body.querySelector('.qol-ss-search').addEventListener('input', renderRows);
         body.querySelectorAll('[data-ss-tab]').forEach(tab => tab.addEventListener('click', () => renderPanel(tab.dataset.ssTab)));
-        body.querySelector('[data-ss-refresh]').addEventListener('click', () => renderPanel(selected.id));
+        body.querySelector('[data-ss-refresh]').addEventListener('click', () => updateStoredSociety(selected));
     }
 
     function injectPanel() {

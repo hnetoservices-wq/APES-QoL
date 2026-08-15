@@ -266,16 +266,6 @@ function normalizeFeatureSections(overlay = document.getElementById('qol-modal-o
     }
 }
 
-function observeFeatureSections(overlay) {
-    if (!overlay || overlay.dataset.qolFeatureSectionsObserved === 'true') return;
-    overlay.dataset.qolFeatureSectionsObserved = 'true';
-
-    const observer = new MutationObserver(() => {
-        requestAnimationFrame(() => normalizeFeatureSections(overlay));
-    });
-    observer.observe(overlay, { childList: true, subtree: true });
-}
-
 function keybindHtml(item) {
     const keys = item.keys.map(key => `<span class="qol-kbd">${escapeHtml(key)}</span>`).join('');
     const state = item.fixed
@@ -822,12 +812,10 @@ function setupQolMenu() {
         overlay.innerHTML = buildSettingsMarkup();
         document.body.appendChild(overlay);
         normalizeFeatureSections(overlay);
-        observeFeatureSections(overlay);
         bindMenuControls(overlay);
         bindMenuShell(overlay);
     } else {
         normalizeFeatureSections(overlay);
-        observeFeatureSections(overlay);
         bindMenuControls(overlay);
     }
 

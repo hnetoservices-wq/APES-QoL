@@ -1500,11 +1500,11 @@
         const {
             requireChange = true,
             allowEmpty = false,
-            timeout = PAGE_CHANGE_TIMEOUT
+            timeout = PAGE_CHANGE_TIMEOUT,
+            previousPage = null
         } = options;
         const startedAt = Date.now();
-        let stableSignature = null;
-        let stableSince = 0;
+        let readySince = 0;
 
         while (Date.now() - startedAt < timeout) {
             if (token !== scanToken) {
@@ -1525,20 +1525,26 @@
                 });
                 const tableReady = rowsReady ||
                     (allowEmpty && rows.length === 0);
-                const changed = rowsSignature !== previousRowsSignature;
-                const isCandidate = (!requireChange || changed) &&
+                const pageChanged = Number.isFinite(previousPage) ?
+                    getCurrentPageNumber(auctionRoot) !== previousPage :
+                    rowsSignature !== previousRowsSignature;
+                const isCandidate = (!requireChange || pageChanged) &&
                     tableReady;
 
+                /*
+                 * Moving the pointer makes Travian add and remove tooltip DOM.
+                 * Its row markup can briefly change while a page is loading,
+                 * so waiting for an unchanged row signature stalled navigation.
+                 * The native page number is stable and is the reliable signal.
+                 */
                 if (isCandidate) {
-                    if (rowsSignature !== stableSignature) {
-                        stableSignature = rowsSignature;
-                        stableSince = Date.now();
-                    } else if (Date.now() - stableSince >= PAGE_SETTLE_TIME) {
+                    if (!readySince) {
+                        readySince = Date.now();
+                    } else if (Date.now() - readySince >= PAGE_SETTLE_TIME) {
                         return true;
                     }
                 } else {
-                    stableSignature = null;
-                    stableSince = 0;
+                    readySince = 0;
                 }
             }
 
@@ -1557,6 +1563,11 @@
             return false;
         }
 
+        const auctionRoot = findAuctionRoot();
+        const previousPage = auctionRoot ?
+            getCurrentPageNumber(auctionRoot) :
+            null;
+
         control.click();
 
         return waitForAuctionRows(
@@ -1564,7 +1575,8 @@
             token,
             {
                 requireChange: true,
-                allowEmpty: false
+                allowEmpty: false,
+                previousPage
             }
         );
     }

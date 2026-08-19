@@ -16,6 +16,7 @@
     const ITEM_SELECT_ID = 'qol-auction-item-select';
     const SCAN_BUTTON_ID = 'qol-auction-scan-btn';
     const STATUS_ID = 'qol-auction-scan-status';
+    const INTERACTION_LOCK_ID = 'qol-auction-interaction-lock';
     const RESULTS_ID = 'qol-auction-consolidated-results';
     const RESULTS_TITLE_ID = 'qol-auction-results-title';
     const RESULTS_COUNT_ID = 'qol-auction-results-count';
@@ -1209,8 +1210,49 @@
         status.dataset.visible = String(Boolean(message));
     }
 
+    function setInteractionLock(locked) {
+        const existingLock = document.getElementById(INTERACTION_LOCK_ID);
+
+        if (!locked) {
+            if (existingLock) {
+                existingLock.remove();
+            }
+
+            return;
+        }
+
+        if (existingLock) {
+            return;
+        }
+
+        const lock = document.createElement('div');
+        lock.id = INTERACTION_LOCK_ID;
+        lock.setAttribute('aria-hidden', 'true');
+        lock.title = 'APES Auction Scanner is working…';
+        Object.assign(lock.style, {
+            position: 'fixed',
+            inset: '0',
+            zIndex: '2147483646',
+            background: 'transparent',
+            cursor: 'wait',
+            pointerEvents: 'auto'
+        });
+
+        ['pointerdown', 'pointermove', 'pointerup', 'mousemove',
+            'mousedown', 'mouseup', 'click', 'dblclick', 'contextmenu',
+            'wheel'].forEach(eventName => {
+            lock.addEventListener(eventName, event => {
+                event.preventDefault();
+                event.stopPropagation();
+            }, { passive: false });
+        });
+
+        document.body.appendChild(lock);
+    }
+
     function setBusy(busy) {
         isBusy = busy;
+        setInteractionLock(busy);
 
         const panel = document.getElementById(PANEL_ID);
 

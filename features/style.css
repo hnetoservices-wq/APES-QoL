@@ -14,7 +14,7 @@
 }
 
 /* Base UI Components (Cog, Toggle Buttons) */
-#qol-cog-btn, #qol-help-toggle-btn, #qol-ir-toggle-btn, #qol-wm-toggle-btn, #qol-watchlist-toggle, #qol-checklist-toggle-btn, #qol-npc-calc-toggle-btn {
+#qol-cog-btn, #qol-help-toggle-btn, #qol-rally-point-toggle-btn, #qol-ir-toggle-btn, #qol-wm-toggle-btn, #qol-watchlist-toggle, #qol-checklist-toggle-btn, #qol-npc-calc-toggle-btn {
     position: fixed !important;
     width: 30px !important;
     height: 30px !important;
@@ -32,7 +32,7 @@
     padding: 0 !important;
 }
 
-#qol-cog-btn:hover, #qol-help-toggle-btn:hover, #qol-ir-toggle-btn:hover, #qol-wm-toggle-btn:hover, #qol-watchlist-toggle:hover, #qol-checklist-toggle-btn:hover, #qol-npc-calc-toggle-btn:hover {
+#qol-cog-btn:hover, #qol-help-toggle-btn:hover, #qol-rally-point-toggle-btn:hover, #qol-ir-toggle-btn:hover, #qol-wm-toggle-btn:hover, #qol-watchlist-toggle:hover, #qol-checklist-toggle-btn:hover, #qol-npc-calc-toggle-btn:hover {
     transform: scale(1.1) !important;
     background-color: #f7f5f0 !important;
 }
@@ -41,7 +41,7 @@
     transform: rotate(45deg) scale(1.1) !important;
 }
 
-#qol-cog-btn svg, #qol-help-toggle-btn svg, #qol-ir-toggle-btn svg, #qol-wm-toggle-btn svg, #qol-watchlist-toggle svg, #qol-checklist-toggle-btn svg, #qol-npc-calc-toggle-btn svg {
+#qol-cog-btn svg, #qol-help-toggle-btn svg, #qol-rally-point-toggle-btn svg, #qol-ir-toggle-btn svg, #qol-wm-toggle-btn svg, #qol-watchlist-toggle svg, #qol-checklist-toggle-btn svg, #qol-npc-calc-toggle-btn svg {
     width: 18px !important;
     height: 18px !important;
     fill: none !important;
@@ -59,6 +59,7 @@
 
 /* Blur and dim toolbar buttons when menu overlay is open */
 body.qol-menu-open #qol-cog-btn,
+body.qol-menu-open #qol-rally-point-toggle-btn,
 body.qol-menu-open #qol-wm-toggle-btn,
 body.qol-menu-open #qol-ir-toggle-btn,
 body.qol-menu-open #qol-watchlist-toggle,

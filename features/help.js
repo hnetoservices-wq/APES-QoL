@@ -6,8 +6,7 @@
     const TUTORIAL_OPTIONS = [
         { value: '', label: '-- Select a feature tutorial... --' },
         { value: 'npcCalculator', label: 'NPC Merchant & Troop Calculator' },
-        { value: 'rallyPoint', label: 'Rally Point Parser & Wave Enhancers' },
-        { value: 'incomingResources', label: 'Incoming Resources Tracker' },
+        { value: 'rallyPoint', label: 'Rally Point Scanner & Wave Enhancers' },
         { value: 'watchlistChecklists', label: 'Watchlist & Checklists' },
         { value: 'igmChat', label: 'IGM Enhancer & Chat Silencer' },
         { value: 'keybindsQueue', label: 'Building Queue Enhanced & Keybinds' }
@@ -29,20 +28,13 @@
             ]
         },
         rallyPoint: {
-            title: 'Rally Point Parser & Send Troops Enhancer',
-            purpose: 'Scan incoming village attacks and sieges into standard Travian Kingdom text formats for quick sharing.',
+            title: 'Rally Point Scanner & Send Troops Enhancer',
+            purpose: 'Scan incoming troop movements and resources from one tabbed window, with share-ready results for troop movements.',
             steps: [
-                'Open <b>Rally Point Parser:</b> Click the <b>Parse Incoming Attacks</b> button. The feature will open your RP and scan incoming attacks and sieges, producing "TK format" text ready to copy to kingdom chats/discord.',
+                'Open <b>Rally Point Scanner</b> from the APES toolbar.',
+                'In <b>Incomings</b>, select Attack, Siege, Raid and/or Reinforcements, then click <b>Scan Incomings</b>. The scanner opens the Rally Point, checks every incoming page and produces text ready to copy to kingdom chat or Discord.',
+                'In <b>Resources</b>, click <b>Parse Resources</b> to total Wood, Clay, Iron and Crop approaching the active village from trades, treasures and raids.',
                 '<b>Send Troops Enhancer:</b> When sending attack waves, the enhancer pins "Continue", "Back", and "Send" buttons to the top of your attack window so control buttons stay stationary during multiple wave spamming.'
-            ]
-        },
-        incomingResources: {
-            title: 'Incoming Resources Tracker',
-            purpose: 'Track all incoming resources arriving at your active village from raids, merchant trades, and treasure deliveries.',
-            steps: [
-                'Click the <b>Incoming Resources</b> button (📦) on the toolbar.',
-                'The tracker aggregates all incoming movements arriving at your village.',
-                'Displays total incoming Wood, Clay, Iron, and Crop along with arrival time counts to help plan building upgrades and avoid overflow.'
             ]
         },
         watchlistChecklists: {

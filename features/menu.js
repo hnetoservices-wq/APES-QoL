@@ -63,13 +63,6 @@ const BASIC_FEATURES = [
         description: 'Adds folders, filters and organization tools to in-game conversations.'
     },
     {
-        id: 'qol-chk-incoming-resources',
-        key: 'incomingResources',
-        name: 'Incoming Resources',
-        icon: '⇣',
-        description: 'Summarizes resources approaching the active village from trades, treasures and raids.'
-    },
-    {
         id: 'qol-chk-resource-capacity-timer',
         key: 'resourceCapacityTimer',
         name: 'Resource Capacity Timer',
@@ -79,9 +72,9 @@ const BASIC_FEATURES = [
     {
         id: 'qol-chk-rally-parser',
         key: 'rallyPointParser',
-        name: 'Rally Point Enhancer',
+        name: 'Rally Point Scanner',
         icon: '⚔',
-        description: 'Parses incoming attacks and sieges and produces share-ready Travian Kingdoms text.'
+        description: 'Scans attacks, sieges, raids, reinforcements and incoming resources from one tabbed window.'
     },
     {
         id: 'qol-chk-npc-calc',
@@ -149,8 +142,7 @@ const KEYBINDS = [
 
 const TOOLBAR_ITEMS = [
     { id: 'qol-help-toggle-btn', label: 'Help', key: 'help' },
-    { id: 'qol-ir-toggle-btn', label: 'Incoming Resources', key: 'incomingResources' },
-    { id: 'qol-wm-toggle-btn', label: 'Rally Point Enhancer', key: 'rallyPointParser' },
+    { id: 'qol-rally-point-toggle-btn', label: 'Rally Point Scanner', key: 'rallyPointParser' },
     { id: 'qol-watchlist-toggle', label: 'Watchlists', key: 'watchlist' },
     { id: 'qol-checklist-toggle-btn', label: 'Checklists', key: 'checklists' },
     { id: 'qol-npc-calc-toggle-btn', label: 'NPC Calculator', key: 'npcCalculator' },
@@ -237,8 +229,7 @@ function injectQolMenuStyles() {
         body.qol-toolbar-collapsed #qol-cog-btn::after{content:'▾'!important;position:absolute!important;right:-3px!important;bottom:-4px!important;display:flex!important;align-items:center!important;justify-content:center!important;width:12px!important;height:12px!important;border:1px solid #7d6342!important;border-radius:50%!important;background:#f7f5f0!important;color:#6a5034!important;font-size:8px!important;line-height:1!important}
 
         body.qol-toolbar-collapsed #qol-help-toggle-btn,
-        body.qol-toolbar-collapsed #qol-ir-toggle-btn,
-        body.qol-toolbar-collapsed #qol-wm-toggle-btn,
+        body.qol-toolbar-collapsed #qol-rally-point-toggle-btn,
         body.qol-toolbar-collapsed #qol-watchlist-toggle,
         body.qol-toolbar-collapsed #qol-checklist-toggle-btn,
         body.qol-toolbar-collapsed #qol-npc-calc-toggle-btn,

@@ -1,12 +1,12 @@
 /**
- * Rally Point Multi-Page Rally Point Parser
+ * Rally Point Multi-Page Incoming Movement Parser
  * Native Feature Module - V5.0
  *
  * Visual refresh:
  * - Matches the Oasis & Cropper Scanner styling.
  * - Resizable and draggable panel.
  * - Dedicated Parse, Copy and Clear controls.
- * - Sticky results table with attack/siege badges.
+ * - Sticky results table with movement-type badges.
  */
 
 function initRallyPointEnhancer() {
@@ -16,9 +16,19 @@ function initRallyPointEnhancer() {
     const PANEL_ID = 'qol-rp-action-bar';
     const TOGGLE_ID = 'qol-wm-toggle-btn';
     const STYLE_ID = 'qol-rp-enhancer-styles';
+    const MOVEMENT_TYPE_STORAGE_KEY =
+        'qol_rallyPointMovementTypes';
+
+    const DEFAULT_MOVEMENT_TYPES = {
+        attack: true,
+        siege: true,
+        raid: false,
+        reinforcement: false
+    };
 
     let compiledWaves = [];
     let isScanning = false;
+    let activeMovementTypes = null;
 
     function isEnabled() {
         if (typeof window.isQolEnabled === 'function') {
@@ -35,6 +45,104 @@ function initRallyPointEnhancer() {
             .replace(/>/g, '&gt;')
             .replace(/"/g, '&quot;')
             .replace(/'/g, '&#039;');
+    }
+
+    function getMovementCategory(value) {
+        const normalized = String(value || '')
+            .trim()
+            .toLowerCase();
+
+        if (normalized.includes('siege')) {
+            return 'siege';
+        }
+
+        if (normalized.includes('raid')) {
+            return 'raid';
+        }
+
+        if (
+            normalized.includes('reinforcement') ||
+            normalized.includes('reinforcements') ||
+            normalized.includes('support')
+        ) {
+            return 'reinforcement';
+        }
+
+        if (normalized.includes('attack')) {
+            return 'attack';
+        }
+
+        return null;
+    }
+
+    function getSelectedMovementTypes() {
+        const selectedTypes = {
+            ...DEFAULT_MOVEMENT_TYPES
+        };
+
+        try {
+            const storedValue =
+                localStorage.getItem(
+                    MOVEMENT_TYPE_STORAGE_KEY
+                );
+
+            if (storedValue) {
+                const parsedValue =
+                    JSON.parse(storedValue);
+
+                Object.keys(selectedTypes)
+                    .forEach((type) => {
+                        if (
+                            typeof parsedValue?.[type] ===
+                            'boolean'
+                        ) {
+                            selectedTypes[type] =
+                                parsedValue[type];
+                        }
+                    });
+            }
+        } catch (_) {
+            // Keep the defaults if the saved preference is unavailable.
+        }
+
+        document
+            .querySelectorAll(
+                '[data-qol-rally-movement-type]'
+            )
+            .forEach((checkbox) => {
+                const type =
+                    checkbox.getAttribute(
+                        'data-qol-rally-movement-type'
+                    );
+
+                if (
+                    type &&
+                    Object.prototype.hasOwnProperty.call(
+                        selectedTypes,
+                        type
+                    )
+                ) {
+                    selectedTypes[type] =
+                        checkbox.checked === true;
+                }
+            });
+
+        return selectedTypes;
+    }
+
+    function shouldIncludeMovement(value) {
+        const category =
+            getMovementCategory(value);
+
+        if (!category) {
+            return false;
+        }
+
+        const selectedTypes =
+            activeMovementTypes ||
+            getSelectedMovementTypes();
+
+        return selectedTypes[category] === true;
     }
 
     function injectStyles() {
@@ -295,6 +403,18 @@ function initRallyPointEnhancer() {
                 border: 1px solid #c47975 !important;
             }
 
+            .qol-rp-type-badge.raid {
+                background-color: #e5edf8 !important;
+                color: #315f8e !important;
+                border: 1px solid #86a6c7 !important;
+            }
+
+            .qol-rp-type-badge.reinforcement {
+                background-color: #dfefdc !important;
+                color: #3f6f39 !important;
+                border: 1px solid #8db186 !important;
+            }
+
             .qol-rp-empty {
                 min-height: 130px !important;
                 padding: 28px 12px !important;
@@ -515,26 +635,61 @@ function initRallyPointEnhancer() {
 
         const total = compiledWaves.length;
 
-        const siegeCount = compiledWaves.filter((wave) => {
-            return String(wave.type || '')
-                .toLowerCase()
-                .includes('siege');
-        }).length;
+        const counts = {
+            attack: 0,
+            siege: 0,
+            raid: 0,
+            reinforcement: 0
+        };
 
-        const attackCount = Math.max(
-            0,
-            total - siegeCount
-        );
+        compiledWaves.forEach((wave) => {
+            const category =
+                getMovementCategory(
+                    wave.type
+                );
+
+            if (category) {
+                counts[category] += 1;
+            }
+        });
 
         if (total === 0) {
-            countElement.textContent = '0 waves';
+            countElement.textContent = '0 movements';
             return;
         }
 
+        const detailParts = [
+            ['attack', 'attack', 'attacks'],
+            ['siege', 'siege', 'sieges'],
+            ['raid', 'raid', 'raids'],
+            [
+                'reinforcement',
+                'reinforcement',
+                'reinforcements'
+            ]
+        ]
+            .filter(([type]) => counts[type] > 0)
+            .map(([type, singular, plural]) => {
+                const count = counts[type];
+
+                return `${count} ${
+                    count === 1
+                        ? singular
+                        : plural
+                }`;
+            });
+
         countElement.textContent =
-            `${total} waves · ` +
-            `${attackCount} attacks · ` +
-            `${siegeCount} sieges`;
+            `${total} ${
+                total === 1
+                    ? 'movement'
+                    : 'movements'
+            }` +
+            (
+                detailParts.length
+                    ? ` · ${detailParts.join(' · ')}`
+                    : ''
+            );
     }
 
     function setButtonDisabled(button, disabled) {
@@ -556,7 +711,7 @@ function initRallyPointEnhancer() {
     function renderEmptyState(
         container,
         title = 'No scan results yet.',
-        description = 'Select “Parse Incoming Attacks” to scan the Rally Point.'
+        description = 'Choose the incoming types, then select “Scan Incomings”.'
     ) {
         container.innerHTML = `
             <div class="qol-rp-empty">
@@ -581,7 +736,7 @@ function initRallyPointEnhancer() {
                 </strong>
 
                 <span>
-                    Checking all available incoming movement pages.
+                    Checking every available incoming movement page.
                 </span>
             </div>
         `;
@@ -1096,16 +1251,9 @@ function initRallyPointEnhancer() {
                                 : 'Attack'
                         ).trim();
 
-                    const typeLower =
-                        movementType
-                            .toLowerCase();
-
                     if (
-                        typeLower.includes(
-                            'attack'
-                        ) ||
-                        typeLower.includes(
-                            'siege'
+                        shouldIncludeMovement(
+                            movementType
                         )
                     ) {
                         pageWaves.push({
@@ -1183,12 +1331,10 @@ function initRallyPointEnhancer() {
             const trimmedType =
                 type.trim();
 
-            const typeLower =
-                trimmedType.toLowerCase();
-
             if (
-                typeLower.includes('attack') ||
-                typeLower.includes('siege')
+                shouldIncludeMovement(
+                    trimmedType
+                )
             ) {
                 pageWaves.push({
                     enemy:
@@ -1473,7 +1619,7 @@ function initRallyPointEnhancer() {
         }
 
         statusBox.textContent =
-            `Done! Processed ${compiledWaves.length} waves.`;
+            `Done! Processed ${compiledWaves.length} movements.`;
 
         onComplete();
     }
@@ -1488,8 +1634,8 @@ function initRallyPointEnhancer() {
         ) {
             renderEmptyState(
                 container,
-                'No attacks or sieges found.',
-                'The Rally Point scan completed without finding incoming hostile movements.'
+                'No matching incomings found.',
+                'The Rally Point scan completed without finding any of the selected movement types.'
             );
 
             updateResultCount();
@@ -1505,12 +1651,11 @@ function initRallyPointEnhancer() {
                             'Attack'
                         );
 
-                    const isSiege =
-                        typeText
-                            .toLowerCase()
-                            .includes(
-                                'siege'
-                            );
+                    const category =
+                        getMovementCategory(
+                            typeText
+                        ) ||
+                        'attack';
 
                     return `
                         <tr>
@@ -1530,11 +1675,7 @@ function initRallyPointEnhancer() {
 
                             <td>
                                 <span
-                                    class="qol-rp-type-badge ${
-                                        isSiege
-                                            ? 'siege'
-                                            : 'attack'
-                                    }"
+                                    class="qol-rp-type-badge ${category}"
                                 >
                                     ${escapeHtml(
                                         typeText
@@ -1656,6 +1797,7 @@ function initRallyPointEnhancer() {
         }
 
         compiledWaves = [];
+        activeMovementTypes = null;
 
         const tableTarget =
             document.getElementById(
@@ -1701,7 +1843,7 @@ function initRallyPointEnhancer() {
 
         if (parseButton) {
             parseButton.textContent =
-                'Parse Incoming Attacks';
+                'Scan Incomings';
         }
 
         setStatus(
@@ -1733,7 +1875,7 @@ function initRallyPointEnhancer() {
         bar.innerHTML = `
             <div class="qol-rp-header">
                 <span>
-                    Rally Point Parser
+                    Rally Point Scanner
                 </span>
 
                 <span
@@ -1748,8 +1890,8 @@ function initRallyPointEnhancer() {
             <div class="qol-rp-body">
                 <div class="qol-rp-description">
                     Open and scan every incoming Rally Point page for
-                    attacks and sieges, then copy the results in a
-                    share-ready format.
+                    the selected movement types, then copy the results
+                    in a share-ready format.
                 </div>
 
                 <div class="qol-rp-controls">
@@ -1758,7 +1900,7 @@ function initRallyPointEnhancer() {
                         class="qol-rp-action-btn primary"
                         data-state="ready"
                     >
-                        Parse Incoming Attacks
+                        Scan Incomings
                     </div>
 
                     <div
@@ -1787,7 +1929,7 @@ function initRallyPointEnhancer() {
                     </span>
 
                     <span id="qol-rp-result-count">
-                        0 waves
+                        0 movements
                     </span>
                 </div>
 
@@ -1858,6 +2000,24 @@ function initRallyPointEnhancer() {
                 event.stopPropagation();
 
                 if (isScanning) {
+                    return;
+                }
+
+                activeMovementTypes =
+                    getSelectedMovementTypes();
+
+                if (
+                    !Object.values(
+                        activeMovementTypes
+                    ).some(Boolean)
+                ) {
+                    activeMovementTypes = null;
+
+                    setStatus(
+                        'Select at least one incoming movement type.',
+                        'error'
+                    );
+
                     return;
                 }
 
@@ -1941,9 +2101,10 @@ function initRallyPointEnhancer() {
 
                 if (!panelLoaded) {
                     isScanning = false;
+                    activeMovementTypes = null;
 
                     parseButton.textContent =
-                        'Parse Incoming Attacks';
+                        'Scan Incomings';
 
                     setButtonDisabled(
                         parseButton,
@@ -1993,6 +2154,8 @@ function initRallyPointEnhancer() {
                             tableTarget
                         );
 
+                        activeMovementTypes = null;
+
                         parseButton.textContent =
                             'Parse Again';
 
@@ -2039,7 +2202,7 @@ function initRallyPointEnhancer() {
                             );
 
                             setStatus(
-                                'Scan complete. No attacks or sieges found.',
+                                'Scan complete. No matching incomings found.',
                                 'success'
                             );
                         }
@@ -2084,7 +2247,7 @@ function initRallyPointEnhancer() {
 
         toggleButton.setAttribute(
             'title',
-            'Rally Point Parser'
+            'Rally Point Scanner'
         );
 
         toggleButton.innerHTML = `

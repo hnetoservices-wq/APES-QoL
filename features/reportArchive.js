@@ -318,8 +318,7 @@
         const otherButtonIds = [
             'qol-cog-btn',
             'qol-help-toggle-btn',
-            'qol-ir-toggle-btn',
-            'qol-wm-toggle-btn',
+            'qol-rally-point-toggle-btn',
             'qol-watchlist-toggle',
             'qol-checklist-toggle-btn',
             'qol-npc-calc-toggle-btn',

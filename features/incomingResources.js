@@ -6,7 +6,7 @@
 function initIncomingResourceEnhancer() {
     'use strict';
 
-    const FEATURE_KEY = 'incomingResources';
+    const FEATURE_KEY = 'rallyPointParser';
     const PANEL_ID = 'qol-ir-action-bar';
     const TOGGLE_ID = 'qol-ir-toggle-btn';
     const STYLE_ID = 'qol-ir-enhancer-styles';

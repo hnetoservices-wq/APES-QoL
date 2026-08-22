@@ -34,6 +34,7 @@
         "features/sendButtonsEnhancer.js",
         "features/chatSilencer.js",
         "features/incomingResources.js",
+        "features/rallyPointScanner.js",
         "features/watchlist.js",
         "features/reportArchive.js",
         "features/checklists.js",

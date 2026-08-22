@@ -375,6 +375,7 @@ function initUnifiedRallyPointScanner() {
             }
 
             .qol-rally-movement-option {
+                position: relative !important;
                 display: inline-flex !important;
                 align-items: center !important;
                 gap: 5px !important;
@@ -386,38 +387,61 @@ function initUnifiedRallyPointScanner() {
             }
 
             .qol-rally-movement-option input {
-                appearance: none !important;
-                -webkit-appearance: none !important;
-                display: inline-grid !important;
-                place-content: center !important;
-                flex: 0 0 14px !important;
-                width: 14px !important;
-                height: 14px !important;
-                margin: 0 !important;
+                position: absolute !important;
+                width: 1px !important;
+                height: 1px !important;
+                margin: -1px !important;
                 padding: 0 !important;
-                border: 1px solid #8a7559 !important;
-                border-radius: 3px !important;
-                background: #fffdf8 !important;
-                box-shadow: inset 0 1px 2px rgba(70, 50, 28, .12) !important;
-                cursor: pointer !important;
-                vertical-align: middle !important;
+                border: 0 !important;
+                opacity: 0 !important;
+                overflow: hidden !important;
+                pointer-events: none !important;
             }
 
-            .qol-rally-movement-option input:checked {
+            .qol-rally-checkbox {
+                position: relative !important;
+                display: inline-flex !important;
+                align-items: center !important;
+                justify-content: center !important;
+                flex: 0 0 16px !important;
+                width: 16px !important;
+                height: 16px !important;
+                border: 1px solid #8a7559 !important;
+                border-radius: 3px !important;
+                background: linear-gradient(to bottom, #fffdf8, #eee5d7) !important;
+                box-shadow: inset 0 1px 1px rgba(70, 50, 28, .08), 0 1px 0 rgba(255, 255, 255, .65) !important;
+                transition: border-color .12s ease, background .12s ease !important;
+            }
+
+            .qol-rally-checkbox::after {
+                content: '' !important;
+                display: block !important;
+                width: 8px !important;
+                height: 4px !important;
+                margin-top: -2px !important;
+                border: solid #fff !important;
+                border-width: 0 0 2px 2px !important;
+                opacity: 0 !important;
+                transform: rotate(-45deg) scale(.6) !important;
+                transition: opacity .12s ease, transform .12s ease !important;
+            }
+
+            .qol-rally-movement-option input:checked + .qol-rally-checkbox {
                 border-color: #604727 !important;
-                background-color: #745936 !important;
-                background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 14 14'%3E%3Cpath d='M3 7.2 5.7 10 11 4.3' fill='none' stroke='%23fff' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") !important;
-                background-repeat: no-repeat !important;
-                background-position: center !important;
-                background-size: 12px 12px !important;
+                background: linear-gradient(to bottom, #8b6d45, #684d2d) !important;
                 box-shadow: inset 0 1px 0 rgba(255, 255, 255, .2) !important;
             }
 
-            .qol-rally-movement-option:hover input {
+            .qol-rally-movement-option input:checked + .qol-rally-checkbox::after {
+                opacity: 1 !important;
+                transform: rotate(-45deg) scale(1) !important;
+            }
+
+            .qol-rally-movement-option:hover .qol-rally-checkbox {
                 border-color: #604727 !important;
             }
 
-            .qol-rally-movement-option input:focus-visible {
+            .qol-rally-movement-option input:focus-visible + .qol-rally-checkbox {
                 outline: 2px solid rgba(116, 89, 54, .38) !important;
                 outline-offset: 2px !important;
             }
@@ -694,6 +718,7 @@ function initUnifiedRallyPointScanner() {
                         data-qol-rally-movement-type="${type}"
                         ${selectedTypes[type] ? 'checked' : ''}
                     >
+                    <span class="qol-rally-checkbox" aria-hidden="true"></span>
                     <span>${label}</span>
                 </label>
             `).join('')}

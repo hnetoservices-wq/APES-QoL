@@ -15,6 +15,7 @@ function initUnifiedRallyPointScanner() {
     const PANEL_ID = 'qol-rally-point-scanner';
     const TOGGLE_ID = 'qol-rally-point-toggle-btn';
     const STYLE_ID = 'qol-rally-point-scanner-styles';
+    const SCAN_LOCK_ID = 'qol-rally-point-scan-lock';
     const ACTIVE_TAB_STORAGE_KEY =
         'qol_rallyPointActiveTab';
     const MOVEMENT_TYPE_STORAGE_KEY =
@@ -39,6 +40,128 @@ function initUnifiedRallyPointScanner() {
 
         return true;
     }
+
+    function hideScanLock() {
+        document
+            .getElementById(SCAN_LOCK_ID)
+            ?.remove();
+    }
+
+    function updateScanLock(message) {
+        const status =
+            document.querySelector(
+                `#${SCAN_LOCK_ID} .qol-rally-scan-lock-status`
+            );
+
+        if (status && message) {
+            status.textContent = message;
+        }
+    }
+
+    function showScanLock({
+        title = 'Scanning Rally Point...',
+        message = 'Please wait while APES checks the incoming pages.'
+    } = {}) {
+        hideScanLock();
+
+        if (!document.body) {
+            return;
+        }
+
+        const lock =
+            document.createElement('div');
+
+        lock.id = SCAN_LOCK_ID;
+        lock.setAttribute('role', 'status');
+        lock.setAttribute('aria-live', 'polite');
+        lock.setAttribute('aria-busy', 'true');
+        lock.style.cssText = `
+            position: fixed !important;
+            top: 0 !important;
+            left: 0 !important;
+            width: 100vw !important;
+            height: 100vh !important;
+            background-color: rgba(0, 0, 0, 0.7) !important;
+            z-index: 2147483646 !important;
+            display: flex !important;
+            align-items: center !important;
+            justify-content: center !important;
+            color: #ffffff !important;
+            font-family: Arial, sans-serif !important;
+            font-size: 15px !important;
+            font-weight: bold !important;
+            flex-direction: column !important;
+            gap: 8px !important;
+            text-align: center !important;
+            cursor: wait !important;
+            user-select: none !important;
+            pointer-events: auto !important;
+            touch-action: none !important;
+        `;
+        lock.innerHTML = `
+            <div class="qol-rally-scan-lock-title"></div>
+            <div
+                class="qol-rally-scan-lock-status"
+                style="
+                    max-width: min(520px, 80vw) !important;
+                    color: #dddddd !important;
+                    font-size: 11px !important;
+                    font-weight: normal !important;
+                    line-height: 1.45 !important;
+                "
+            ></div>
+            <div
+                style="
+                    margin-top: 2px !important;
+                    color: #aaaaaa !important;
+                    font-size: 10px !important;
+                    font-weight: normal !important;
+                "
+            >
+                Keep this window open until the scan finishes.
+            </div>
+        `;
+
+        lock.querySelector(
+            '.qol-rally-scan-lock-title'
+        ).textContent = title;
+        lock.querySelector(
+            '.qol-rally-scan-lock-status'
+        ).textContent = message;
+
+        [
+            'pointerdown',
+            'pointermove',
+            'pointerup',
+            'mousemove',
+            'mousedown',
+            'mouseup',
+            'click',
+            'dblclick',
+            'contextmenu',
+            'wheel',
+            'touchstart',
+            'touchmove',
+            'touchend'
+        ].forEach((eventName) => {
+            lock.addEventListener(
+                eventName,
+                (event) => {
+                    event.preventDefault();
+                    event.stopPropagation();
+                },
+                { passive: false }
+            );
+        });
+
+        document.body.appendChild(lock);
+    }
+
+    window.qolRallyPointScanLock = {
+        show: showScanLock,
+        update: updateScanLock,
+        hide: hideScanLock
+    };
 
     function injectStyles() {
         if (document.getElementById(STYLE_ID)) {
@@ -496,7 +619,7 @@ function initUnifiedRallyPointScanner() {
             );
 
         parseButton?.classList.toggle(
-            'disabled',
+            'qol-action-disabled',
             !hasSelection
         );
         parseButton?.setAttribute(
@@ -905,18 +1028,18 @@ function initUnifiedRallyPointScanner() {
                 role="tablist"
                 aria-label="Rally Point scan types"
             >
-                <button
-                    type="button"
+                <div
                     class="qol-rally-tab"
                     data-qol-rally-tab="incomings"
                     role="tab"
-                >Incomings</button>
-                <button
-                    type="button"
+                    tabindex="0"
+                >Incomings</div>
+                <div
                     class="qol-rally-tab"
                     data-qol-rally-tab="resources"
                     role="tab"
-                >Resources</button>
+                    tabindex="0"
+                >Resources</div>
             </div>
             <div class="qol-rally-scanner-content">
                 <section
@@ -958,14 +1081,28 @@ function initUnifiedRallyPointScanner() {
                 '[data-qol-rally-tab]'
             )
             .forEach((tab) => {
+                const selectTab = () => {
+                    activateTab(
+                        tab.getAttribute(
+                            'data-qol-rally-tab'
+                        )
+                    );
+                };
+
                 tab.addEventListener(
                     'click',
-                    () => {
-                        activateTab(
-                            tab.getAttribute(
-                                'data-qol-rally-tab'
-                            )
-                        );
+                    selectTab
+                );
+                tab.addEventListener(
+                    'keydown',
+                    (event) => {
+                        if (
+                            event.key === 'Enter' ||
+                            event.key === ' '
+                        ) {
+                            event.preventDefault();
+                            selectTab();
+                        }
                     }
                 );
             });
@@ -1100,6 +1237,8 @@ function initUnifiedRallyPointScanner() {
     }
 
     function destroyUI() {
+        hideScanLock();
+
         document
             .getElementById(PANEL_ID)
             ?.remove();

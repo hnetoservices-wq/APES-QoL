@@ -47,6 +47,24 @@ function initRallyPointEnhancer() {
             .replace(/'/g, '&#039;');
     }
 
+    function showScanLock(message) {
+        window.qolRallyPointScanLock
+            ?.show({
+                title: 'Scanning Incomings...',
+                message
+            });
+    }
+
+    function updateScanLock(message) {
+        window.qolRallyPointScanLock
+            ?.update(message);
+    }
+
+    function hideScanLock() {
+        window.qolRallyPointScanLock
+            ?.hide();
+    }
+
     function getMovementCategory(value) {
         const normalized = String(value || '')
             .trim()
@@ -242,10 +260,11 @@ function initRallyPointEnhancer() {
             }
 
             .qol-rp-action-btn {
-                height: 28px !important;
-                padding: 5px 11px !important;
-                border: 1px solid #523d24 !important;
-                border-radius: 3px !important;
+                height: auto !important;
+                padding: 4px 8px !important;
+                border: 1px solid #42311c !important;
+                border-radius: 4px !important;
+                background-color: #543f26 !important;
                 background: linear-gradient(
                     to bottom,
                     #7d6342,
@@ -261,23 +280,23 @@ function initRallyPointEnhancer() {
                 display: inline-flex !important;
                 align-items: center !important;
                 justify-content: center !important;
+                font-family: Arial, sans-serif !important;
+                line-height: 1.2 !important;
+                box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2) !important;
             }
 
-            .qol-rp-action-btn.primary {
+            .qol-rp-action-primary {
                 min-width: 190px !important;
             }
 
-            .qol-rp-action-btn.secondary {
-                background: linear-gradient(
-                    to bottom,
-                    #fdfbf7,
-                    #e7dcc8
-                ) !important;
-                color: #5b4328 !important;
-                border-color: #8c7250 !important;
+            .qol-rp-action-secondary {
+                background-color: #543f26 !important;
+                background: linear-gradient(to bottom, #7d6342, #543f26) !important;
+                color: #ffffff !important;
+                border-color: #42311c !important;
             }
 
-            .qol-rp-action-btn.danger {
+            .qol-rp-action-danger {
                 background: linear-gradient(
                     to bottom,
                     #d9534f,
@@ -286,11 +305,16 @@ function initRallyPointEnhancer() {
                 border-color: #8f211e !important;
             }
 
-            .qol-rp-action-btn:not(.disabled):hover {
-                filter: brightness(1.08) !important;
+            .qol-rp-action-btn:not(.qol-action-disabled):hover {
+                background-color: #543f26 !important;
+                background: linear-gradient(to bottom, #8d7352, #644f36) !important;
             }
 
-            .qol-rp-action-btn.disabled {
+            .qol-rp-action-danger:not(.qol-action-disabled):hover {
+                background: linear-gradient(to bottom, #e4605d, #d43f3a) !important;
+            }
+
+            .qol-rp-action-btn.qol-action-disabled {
                 opacity: 0.45 !important;
                 cursor: default !important;
                 pointer-events: none !important;
@@ -472,7 +496,7 @@ function initRallyPointEnhancer() {
                     flex-wrap: wrap !important;
                 }
 
-                .qol-rp-action-btn.primary {
+                .qol-rp-action-primary {
                     flex: 1 1 100% !important;
                 }
             }
@@ -698,7 +722,7 @@ function initRallyPointEnhancer() {
         }
 
         button.classList.toggle(
-            'disabled',
+            'qol-action-disabled',
             disabled
         );
 
@@ -1517,6 +1541,9 @@ function initRallyPointEnhancer() {
         if (!initialContainer) {
             statusBox.textContent =
                 'Error: Rally Point container not found.';
+            updateScanLock(
+                'Rally Point container could not be found.'
+            );
 
             onComplete();
             return;
@@ -1529,6 +1556,9 @@ function initRallyPointEnhancer() {
             );
 
         if (firstButton) {
+            updateScanLock(
+                'Returning to the first incoming page...'
+            );
             triggerClick(firstButton);
 
             await new Promise(
@@ -1544,6 +1574,9 @@ function initRallyPointEnhancer() {
         while (pageCount <= 50) {
             statusBox.textContent =
                 `Scanning page ${pageCount}...`;
+            updateScanLock(
+                `Scanning incoming page ${pageCount}...`
+            );
 
             const currentContainer =
                 getRallyPointContainer();
@@ -1620,6 +1653,9 @@ function initRallyPointEnhancer() {
 
         statusBox.textContent =
             `Done! Processed ${compiledWaves.length} movements.`;
+        updateScanLock(
+            `Finishing scan with ${compiledWaves.length} matching movements...`
+        );
 
         onComplete();
     }
@@ -1796,6 +1832,7 @@ function initRallyPointEnhancer() {
             return;
         }
 
+        hideScanLock();
         compiledWaves = [];
         activeMovementTypes = null;
 
@@ -1897,7 +1934,7 @@ function initRallyPointEnhancer() {
                 <div class="qol-rp-controls">
                     <div
                         id="qol-btn-merge"
-                        class="qol-rp-action-btn primary"
+                        class="qol-rp-action-btn qol-rp-action-primary"
                         data-state="ready"
                     >
                         Scan Incomings
@@ -1905,7 +1942,7 @@ function initRallyPointEnhancer() {
 
                     <div
                         id="qol-btn-copy"
-                        class="qol-rp-action-btn secondary"
+                        class="qol-rp-action-btn qol-rp-action-secondary"
                         style="display: none !important;"
                     >
                         Copy
@@ -1913,7 +1950,7 @@ function initRallyPointEnhancer() {
 
                     <div
                         id="qol-btn-clear"
-                        class="qol-rp-action-btn danger"
+                        class="qol-rp-action-btn qol-rp-action-danger"
                         style="display: none !important;"
                     >
                         Clear
@@ -2023,6 +2060,9 @@ function initRallyPointEnhancer() {
 
                 isScanning = true;
                 compiledWaves = [];
+                showScanLock(
+                    'Opening the Rally Point...'
+                );
 
                 setButtonDisabled(
                     parseButton,
@@ -2094,14 +2134,24 @@ function initRallyPointEnhancer() {
                         `subtab:Incoming`;
                 }
 
-                const panelLoaded =
-                    await awaitRallyPointRender(
-                        8000
+                let panelLoaded = false;
+
+                try {
+                    panelLoaded =
+                        await awaitRallyPointRender(
+                            8000
+                        );
+                } catch (error) {
+                    console.error(
+                        '[RallyPointEnhancer] Rally Point render error:',
+                        error
                     );
+                }
 
                 if (!panelLoaded) {
                     isScanning = false;
                     activeMovementTypes = null;
+                    hideScanLock();
 
                     parseButton.textContent =
                         'Scan Incomings';
@@ -2141,6 +2191,9 @@ function initRallyPointEnhancer() {
                 setStatus(
                     'Scanning incoming movement pages...',
                     'working'
+                );
+                updateScanLock(
+                    'Scanning incoming movement pages...'
                 );
 
                 collectAllPages(
@@ -2206,8 +2259,43 @@ function initRallyPointEnhancer() {
                                 'success'
                             );
                         }
+
+                        hideScanLock();
                     }
-                );
+                ).catch((error) => {
+                    console.error(
+                        '[RallyPointEnhancer] Incoming scan error:',
+                        error
+                    );
+
+                    isScanning = false;
+                    activeMovementTypes = null;
+                    hideScanLock();
+
+                    parseButton.textContent =
+                        'Scan Incomings';
+                    setButtonDisabled(
+                        parseButton,
+                        false
+                    );
+                    setButtonDisabled(
+                        copyButton,
+                        false
+                    );
+                    setButtonDisabled(
+                        clearButton,
+                        false
+                    );
+                    setStatus(
+                        'The incoming scan stopped unexpectedly.',
+                        'error'
+                    );
+                    renderEmptyState(
+                        tableTarget,
+                        'Incoming scan stopped.',
+                        'Try the scan again. The screen is no longer locked.'
+                    );
+                });
             }
         );
 
@@ -2357,6 +2445,8 @@ function initRallyPointEnhancer() {
     }
 
     function destroyUI() {
+        hideScanLock();
+
         const bar =
             document.getElementById(
                 PANEL_ID

@@ -33,6 +33,24 @@ function initIncomingResourceEnhancer() {
             .replace(/'/g, '&#039;');
     }
 
+    function showScanLock(message) {
+        window.qolRallyPointScanLock
+            ?.show({
+                title: 'Scanning Resources...',
+                message
+            });
+    }
+
+    function updateScanLock(message) {
+        window.qolRallyPointScanLock
+            ?.update(message);
+    }
+
+    function hideScanLock() {
+        window.qolRallyPointScanLock
+            ?.hide();
+    }
+
     function formatNumber(value) {
         return Number(value || 0).toLocaleString();
     }
@@ -134,10 +152,11 @@ function initIncomingResourceEnhancer() {
             }
 
             .qol-ir-action-btn {
-                height: 28px !important;
-                padding: 5px 11px !important;
-                border: 1px solid #523d24 !important;
-                border-radius: 3px !important;
+                height: auto !important;
+                padding: 4px 8px !important;
+                border: 1px solid #42311c !important;
+                border-radius: 4px !important;
+                background-color: #543f26 !important;
                 background: linear-gradient(
                     to bottom,
                     #7d6342,
@@ -153,13 +172,16 @@ function initIncomingResourceEnhancer() {
                 display: inline-flex !important;
                 align-items: center !important;
                 justify-content: center !important;
+                font-family: Arial, sans-serif !important;
+                line-height: 1.2 !important;
+                box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2) !important;
             }
 
-            .qol-ir-action-btn.primary {
+            .qol-ir-action-primary {
                 min-width: 170px !important;
             }
 
-            .qol-ir-action-btn.danger {
+            .qol-ir-action-danger {
                 background: linear-gradient(
                     to bottom,
                     #d9534f,
@@ -168,11 +190,16 @@ function initIncomingResourceEnhancer() {
                 border-color: #8f211e !important;
             }
 
-            .qol-ir-action-btn:not(.disabled):hover {
-                filter: brightness(1.08) !important;
+            .qol-ir-action-btn:not(.qol-action-disabled):hover {
+                background-color: #543f26 !important;
+                background: linear-gradient(to bottom, #8d7352, #644f36) !important;
             }
 
-            .qol-ir-action-btn.disabled {
+            .qol-ir-action-danger:not(.qol-action-disabled):hover {
+                background: linear-gradient(to bottom, #e4605d, #d43f3a) !important;
+            }
+
+            .qol-ir-action-btn.qol-action-disabled {
                 opacity: 0.45 !important;
                 cursor: default !important;
                 pointer-events: none !important;
@@ -385,7 +412,7 @@ function initIncomingResourceEnhancer() {
                     flex-wrap: wrap !important;
                 }
 
-                .qol-ir-action-btn.primary {
+                .qol-ir-action-primary {
                     flex: 1 1 100% !important;
                 }
             }
@@ -395,6 +422,8 @@ function initIncomingResourceEnhancer() {
     }
 
     function destroyUI() {
+        hideScanLock();
+
         const bar =
             document.getElementById(
                 PANEL_ID
@@ -701,7 +730,7 @@ function initIncomingResourceEnhancer() {
         }
 
         button.classList.toggle(
-            'disabled',
+            'qol-action-disabled',
             disabled
         );
 
@@ -1678,6 +1707,9 @@ function initIncomingResourceEnhancer() {
         if (!initialContainer) {
             statusBox.textContent =
                 'Error: Rally Point container not found.';
+            updateScanLock(
+                'Rally Point container could not be found.'
+            );
 
             isScanning = false;
 
@@ -1693,6 +1725,9 @@ function initIncomingResourceEnhancer() {
             );
 
         if (firstButton) {
+            updateScanLock(
+                'Returning to the first incoming page...'
+            );
             triggerClick(
                 firstButton
             );
@@ -1714,6 +1749,9 @@ function initIncomingResourceEnhancer() {
         ) {
             statusBox.textContent =
                 `Scanning page ${pageCount}...`;
+            updateScanLock(
+                `Scanning resource page ${pageCount}...`
+            );
 
             const currentContainer =
                 getRallyPointContainer();
@@ -1806,6 +1844,9 @@ function initIncomingResourceEnhancer() {
 
         statusBox.textContent =
             `Done! Processed ${compiledShipments.length} shipments.`;
+        updateScanLock(
+            `Finishing scan with ${compiledShipments.length} resource shipments...`
+        );
 
         onComplete();
     }
@@ -2044,6 +2085,7 @@ function initIncomingResourceEnhancer() {
             return;
         }
 
+        hideScanLock();
         compiledShipments = [];
 
         const resultsTarget =
@@ -2132,7 +2174,7 @@ function initIncomingResourceEnhancer() {
                 <div class="qol-ir-controls">
                     <div
                         id="qol-ir-btn-parse"
-                        class="qol-ir-action-btn primary"
+                        class="qol-ir-action-btn qol-ir-action-primary"
                         data-state="ready"
                     >
                         Parse Resources
@@ -2140,7 +2182,7 @@ function initIncomingResourceEnhancer() {
 
                     <div
                         id="qol-ir-btn-clear"
-                        class="qol-ir-action-btn danger"
+                        class="qol-ir-action-btn qol-ir-action-danger"
                         style="display: none !important;"
                     >
                         Clear
@@ -2228,6 +2270,9 @@ function initIncomingResourceEnhancer() {
 
                 isScanning = true;
                 compiledShipments = [];
+                showScanLock(
+                    'Opening the Rally Point...'
+                );
 
                 setButtonDisabled(
                     parseButton,
@@ -2288,13 +2333,23 @@ function initIncomingResourceEnhancer() {
                         'subtab:Incoming';
                 }
 
-                const panelLoaded =
-                    await awaitRallyPointRender(
-                        8000
+                let panelLoaded = false;
+
+                try {
+                    panelLoaded =
+                        await awaitRallyPointRender(
+                            8000
+                        );
+                } catch (error) {
+                    console.error(
+                        '[IncomingResourceEnhancer] Rally Point render error:',
+                        error
                     );
+                }
 
                 if (!panelLoaded) {
                     isScanning = false;
+                    hideScanLock();
 
                     parseButton.textContent =
                         'Parse Resources';
@@ -2329,6 +2384,9 @@ function initIncomingResourceEnhancer() {
                 setStatus(
                     'Scanning incoming resource pages...',
                     'working'
+                );
+                updateScanLock(
+                    'Scanning incoming resource pages...'
                 );
 
                 collectAllPages(
@@ -2375,8 +2433,38 @@ function initIncomingResourceEnhancer() {
                                 'success'
                             );
                         }
+
+                        hideScanLock();
                     }
-                );
+                ).catch((error) => {
+                    console.error(
+                        '[IncomingResourceEnhancer] Resource scan error:',
+                        error
+                    );
+
+                    isScanning = false;
+                    hideScanLock();
+
+                    parseButton.textContent =
+                        'Parse Resources';
+                    setButtonDisabled(
+                        parseButton,
+                        false
+                    );
+                    setButtonDisabled(
+                        clearButton,
+                        false
+                    );
+                    setStatus(
+                        'The resource scan stopped unexpectedly.',
+                        'error'
+                    );
+                    renderEmptyState(
+                        resultsTarget,
+                        'Resource scan stopped.',
+                        'Try the scan again. The screen is no longer locked.'
+                    );
+                });
             }
         );
 

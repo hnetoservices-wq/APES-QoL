@@ -386,11 +386,53 @@ function initUnifiedRallyPointScanner() {
             }
 
             .qol-rally-movement-option input {
+                appearance: none !important;
+                -webkit-appearance: none !important;
+                display: inline-grid !important;
+                place-content: center !important;
+                flex: 0 0 14px !important;
                 width: 14px !important;
                 height: 14px !important;
                 margin: 0 !important;
-                accent-color: #745936 !important;
+                padding: 0 !important;
+                border: 1px solid #8a7559 !important;
+                border-radius: 3px !important;
+                background: #fffdf8 !important;
+                box-shadow: inset 0 1px 2px rgba(70, 50, 28, .12) !important;
                 cursor: pointer !important;
+                vertical-align: middle !important;
+            }
+
+            .qol-rally-movement-option input::after {
+                content: '' !important;
+                width: 8px !important;
+                height: 5px !important;
+                margin-top: -1px !important;
+                border: solid #fff !important;
+                border-width: 0 0 2px 2px !important;
+                opacity: 0 !important;
+                transform: rotate(-45deg) scale(.7) !important;
+                transform-origin: center !important;
+            }
+
+            .qol-rally-movement-option input:checked {
+                border-color: #604727 !important;
+                background: linear-gradient(to bottom, #866a43, #684d2d) !important;
+                box-shadow: inset 0 1px 0 rgba(255, 255, 255, .2) !important;
+            }
+
+            .qol-rally-movement-option input:checked::after {
+                opacity: 1 !important;
+                transform: rotate(-45deg) scale(1) !important;
+            }
+
+            .qol-rally-movement-option:hover input {
+                border-color: #604727 !important;
+            }
+
+            .qol-rally-movement-option input:focus-visible {
+                outline: 2px solid rgba(116, 89, 54, .38) !important;
+                outline-offset: 2px !important;
             }
 
             .qol-rally-movement-warning {

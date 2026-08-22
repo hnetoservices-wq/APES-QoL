@@ -357,8 +357,9 @@ function initIgmEnhancer() {
             #${TOOLBAR_ID} {
                 position: relative !important;
                 display: block !important;
-                width: auto !important;
+                width: 100% !important;
                 min-width: 0 !important;
+                max-width: 100% !important;
                 height: auto !important;
                 margin: 0 0 8px 0 !important;
                 padding: 0 !important;
@@ -376,7 +377,7 @@ function initIgmEnhancer() {
                     !important;
                 font-size: 11px !important;
                 line-height: normal !important;
-                overflow: visible !important;
+                overflow: hidden !important;
                 box-sizing: border-box !important;
             }
 
@@ -582,39 +583,39 @@ function initIgmEnhancer() {
                     border-box
                     !important;
                 padding-right:
-                    98px
+                    76px
                     !important;
             }
 
             .qol-igm-row-folder {
                 position: absolute !important;
-                right: 6px !important;
-                bottom: 5px !important;
+                right: 4px !important;
+                bottom: 3px !important;
                 z-index: 4 !important;
                 display: inline-flex !important;
                 align-items: center !important;
                 justify-content:
                     center
                     !important;
-                max-width: 88px !important;
-                height: 22px !important;
+                max-width: 68px !important;
+                height: 18px !important;
                 margin: 0 !important;
-                padding: 3px 7px !important;
+                padding: 2px 5px !important;
                 border:
                     1px solid #523d24
                     !important;
-                border-radius: 11px !important;
+                border-radius: 2px !important;
                 background:
                     linear-gradient(
                         to bottom,
-                        #7d6342,
-                        #543f26
+                        #fffdf8,
+                        #e8dfd1
                     )
                     !important;
-                color: #ffffff !important;
-                font-size: 10px !important;
-                font-weight: bold !important;
-                line-height: 14px !important;
+                color: #493720 !important;
+                font-size: 9px !important;
+                font-weight: normal !important;
+                line-height: 12px !important;
                 text-align: center !important;
                 white-space: nowrap !important;
                 overflow: hidden !important;
@@ -623,36 +624,34 @@ function initIgmEnhancer() {
                     !important;
                 cursor: pointer !important;
                 user-select: none !important;
-                box-shadow:
-                    0 1px 2px
-                    rgba(0, 0, 0, 0.18)
-                    !important;
+                box-shadow: none !important;
             }
 
             .qol-igm-row-folder:hover {
-                filter:
-                    brightness(1.09)
-                    !important;
+                background: #fffaf0 !important;
+                border-color: #6e5332 !important;
             }
 
-            .qol-igm-row-folder.trash {
+            .qol-igm-row-folder.trash,
+            .qol-igm-row-folder.spam {
                 background:
                     linear-gradient(
                         to bottom,
-                        #d9534f,
-                        #b52b27
+                        #f8e1df,
+                        #e8c2bf
                     )
                     !important;
                 border-color:
-                    #8f211e
+                    #a9625d
                     !important;
+                color: #7d2924 !important;
             }
 
             .qol-igm-row-folder::after {
                 content: '▾' !important;
                 display: inline-block !important;
                 margin-left: 5px !important;
-                color: #f4ead8 !important;
+                color: #725735 !important;
                 font-size: 8px !important;
                 line-height: 1 !important;
             }
@@ -1291,6 +1290,11 @@ function initIgmEnhancer() {
             'trash',
             currentTag === 'Trash'
         );
+
+        badge.classList.toggle(
+            'spam',
+            currentTag === 'Spam'
+        );
     }
 
     function injectRowBadges() {
@@ -1517,6 +1521,30 @@ function initIgmEnhancer() {
             );
         }
 
+        const conversationWidth =
+            Math.round(
+                context.list
+                    .getBoundingClientRect()
+                    .width ||
+                context.wrapper
+                    .getBoundingClientRect()
+                    .width ||
+                0
+            );
+
+        if (conversationWidth > 0) {
+            toolbar.style.setProperty(
+                'width',
+                `${conversationWidth}px`,
+                'important'
+            );
+            toolbar.style.setProperty(
+                'max-width',
+                `${conversationWidth}px`,
+                'important'
+            );
+        }
+
         updateFilterButton();
     }
 
@@ -1660,7 +1688,10 @@ function initIgmEnhancer() {
 
             const shouldShow =
                 currentFilter === 'All'
-                    ? tag !== 'Trash'
+                    ? ![
+                        'Spam',
+                        'Trash'
+                    ].includes(tag)
                     : tag ===
                         currentFilter;
 

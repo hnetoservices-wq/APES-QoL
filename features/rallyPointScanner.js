@@ -386,6 +386,18 @@ function initUnifiedRallyPointScanner() {
                 user-select: none !important;
             }
 
+            .qol-rally-movement-option::before,
+            .qol-rally-movement-option::after {
+                content: none !important;
+                display: none !important;
+                width: 0 !important;
+                height: 0 !important;
+                margin: 0 !important;
+                padding: 0 !important;
+                border: 0 !important;
+                background: none !important;
+            }
+
             .qol-rally-movement-option input {
                 display: none !important;
             }
@@ -403,6 +415,11 @@ function initUnifiedRallyPointScanner() {
                 background: linear-gradient(to bottom, #fffdf8, #eee5d7) !important;
                 box-shadow: inset 0 1px 1px rgba(70, 50, 28, .08), 0 1px 0 rgba(255, 255, 255, .65) !important;
                 transition: border-color .12s ease, background .12s ease !important;
+            }
+
+            .qol-rally-checkbox::before {
+                content: none !important;
+                display: none !important;
             }
 
             .qol-rally-checkbox::after {

@@ -387,15 +387,7 @@ function initUnifiedRallyPointScanner() {
             }
 
             .qol-rally-movement-option input {
-                position: absolute !important;
-                width: 1px !important;
-                height: 1px !important;
-                margin: -1px !important;
-                padding: 0 !important;
-                border: 0 !important;
-                opacity: 0 !important;
-                overflow: hidden !important;
-                pointer-events: none !important;
+                display: none !important;
             }
 
             .qol-rally-checkbox {
@@ -426,13 +418,13 @@ function initUnifiedRallyPointScanner() {
                 transition: opacity .12s ease, transform .12s ease !important;
             }
 
-            .qol-rally-movement-option input:checked + .qol-rally-checkbox {
+            .qol-rally-checkbox.checked {
                 border-color: #604727 !important;
                 background: linear-gradient(to bottom, #8b6d45, #684d2d) !important;
                 box-shadow: inset 0 1px 0 rgba(255, 255, 255, .2) !important;
             }
 
-            .qol-rally-movement-option input:checked + .qol-rally-checkbox::after {
+            .qol-rally-checkbox.checked::after {
                 opacity: 1 !important;
                 transform: rotate(-45deg) scale(1) !important;
             }
@@ -441,7 +433,7 @@ function initUnifiedRallyPointScanner() {
                 border-color: #604727 !important;
             }
 
-            .qol-rally-movement-option input:focus-visible + .qol-rally-checkbox {
+            .qol-rally-movement-option:focus-within .qol-rally-checkbox {
                 outline: 2px solid rgba(116, 89, 54, .38) !important;
                 outline-offset: 2px !important;
             }
@@ -648,6 +640,11 @@ function initUnifiedRallyPointScanner() {
                 '[data-qol-rally-movement-type]'
             )
             .forEach((checkbox) => {
+                checkbox.nextElementSibling
+                    ?.classList.toggle(
+                        'checked',
+                        checkbox.checked === true
+                    );
                 selectedTypes[
                     checkbox.getAttribute(
                         'data-qol-rally-movement-type'
@@ -715,10 +712,11 @@ function initUnifiedRallyPointScanner() {
                 <label class="qol-rally-movement-option">
                     <input
                         type="checkbox"
+                        style="display: none !important;"
                         data-qol-rally-movement-type="${type}"
                         ${selectedTypes[type] ? 'checked' : ''}
                     >
-                    <span class="qol-rally-checkbox" aria-hidden="true"></span>
+                    <span class="qol-rally-checkbox${selectedTypes[type] ? ' checked' : ''}" aria-hidden="true"></span>
                     <span>${label}</span>
                 </label>
             `).join('')}

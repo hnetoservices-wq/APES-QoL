@@ -1325,6 +1325,108 @@ function initRallyPointEnhancer() {
             });
         }
 
+        /*
+         * Current Travian Kingdoms Rally Point layout.
+         *
+         * Support rows do not contain visible text such as
+         * "Reinforcement" or "Support". Their movement type is exposed
+         * only by an icon class (for example
+         * movement_support_small_flat_black), so the text-regex fallback
+         * below cannot discover them.
+         */
+        const detailRows =
+            container.querySelectorAll(
+                'troop-details-rallypoint.movingTroops > ' +
+                '.troopsDetailContainer, ' +
+                '.movingTroops > .troopsDetailContainer'
+            );
+
+        detailRows.forEach((row) => {
+            const movementIcon =
+                row.querySelector(
+                    '.troopsTitle [class*="movement_"][class*="_small"]'
+                );
+
+            if (!movementIcon) {
+                return;
+            }
+
+            const iconClasses =
+                String(movementIcon.className || '');
+            const category =
+                getMovementCategory(iconClasses);
+
+            if (
+                !category ||
+                !shouldIncludeMovement(iconClasses)
+            ) {
+                return;
+            }
+
+            const enemyElement =
+                row.querySelector(
+                    '.troopsTitle .playerLink'
+                );
+            const villageElement =
+                row.querySelector(
+                    '.troopsTitle .villageLink'
+                );
+            const travelElement =
+                row.querySelector(
+                    '.countdownTo [countdown], ' +
+                    '.countdownContainer [countdown]'
+                );
+            const landingElement =
+                row.querySelector(
+                    '.countdownTo [i18ndt], ' +
+                    '.countdownContainer [i18ndt]'
+                );
+
+            if (
+                !enemyElement ||
+                !villageElement ||
+                !landingElement
+            ) {
+                return;
+            }
+
+            const movementLabels = {
+                attack: 'Attack',
+                siege: 'Siege',
+                raid: 'Raid',
+                reinforcement: 'Reinforcement'
+            };
+
+            pageWaves.push({
+                enemy:
+                    enemyElement.textContent
+                        .trim() || 'Unknown',
+
+                enemyVillage:
+                    villageElement.textContent
+                        .trim() || 'Unknown',
+
+                type:
+                    movementLabels[category],
+
+                travel:
+                    travelElement
+                        ? travelElement.textContent
+                            .trim()
+                        : '00:00:00',
+
+                landing:
+                    landingElement.textContent
+                        .trim(),
+
+                player:
+                    contextData.playerName,
+
+                village:
+                    contextData.villageName
+            });
+        });
+
         const waveRegex =
             /([A-Za-z\s]+?)\s+by\s+(.+?)\s+from\s+(.+?)\s+(?:in|within)\s+([0-9:]+)\s+(?:at|on)\s+([0-9:]+)/gi;
 

@@ -403,27 +403,14 @@ function initUnifiedRallyPointScanner() {
                 vertical-align: middle !important;
             }
 
-            .qol-rally-movement-option input::after {
-                content: '' !important;
-                width: 8px !important;
-                height: 5px !important;
-                margin-top: -1px !important;
-                border: solid #fff !important;
-                border-width: 0 0 2px 2px !important;
-                opacity: 0 !important;
-                transform: rotate(-45deg) scale(.7) !important;
-                transform-origin: center !important;
-            }
-
             .qol-rally-movement-option input:checked {
                 border-color: #604727 !important;
-                background: linear-gradient(to bottom, #866a43, #684d2d) !important;
+                background-color: #745936 !important;
+                background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 14 14'%3E%3Cpath d='M3 7.2 5.7 10 11 4.3' fill='none' stroke='%23fff' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") !important;
+                background-repeat: no-repeat !important;
+                background-position: center !important;
+                background-size: 12px 12px !important;
                 box-shadow: inset 0 1px 0 rgba(255, 255, 255, .2) !important;
-            }
-
-            .qol-rally-movement-option input:checked::after {
-                opacity: 1 !important;
-                transform: rotate(-45deg) scale(1) !important;
             }
 
             .qol-rally-movement-option:hover input {

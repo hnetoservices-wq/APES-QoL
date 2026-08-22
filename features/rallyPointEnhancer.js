@@ -1218,13 +1218,22 @@ function initRallyPointEnhancer() {
 
         const pageWaves = [];
 
-        const rowElements =
+        const detailRows =
             container.querySelectorAll(
-                'tr.movement, ' +
-                'tr.troopRow, ' +
-                'div.movementRow, ' +
-                '.movementList .entry'
+                'troop-details-rallypoint.movingTroops > ' +
+                '.troopsDetailContainer, ' +
+                '.movingTroops > .troopsDetailContainer'
             );
+
+        const rowElements =
+            detailRows.length > 0
+                ? []
+                : container.querySelectorAll(
+                    'tr.movement, ' +
+                    'tr.troopRow, ' +
+                    'div.movementRow, ' +
+                    '.movementList .entry'
+                );
 
         if (rowElements.length > 0) {
             rowElements.forEach((row) => {
@@ -1334,13 +1343,6 @@ function initRallyPointEnhancer() {
          * movement_support_small_flat_black), so the text-regex fallback
          * below cannot discover them.
          */
-        const detailRows =
-            container.querySelectorAll(
-                'troop-details-rallypoint.movingTroops > ' +
-                '.troopsDetailContainer, ' +
-                '.movingTroops > .troopsDetailContainer'
-            );
-
         detailRows.forEach((row) => {
             const movementIcon =
                 row.querySelector(
@@ -1353,12 +1355,22 @@ function initRallyPointEnhancer() {
 
             const iconClasses =
                 String(movementIcon.className || '');
+            const titleText =
+                String(
+                    row.querySelector(
+                        '.troopsTitle'
+                    )?.textContent || ''
+                );
             const category =
+                getMovementCategory(titleText) ||
                 getMovementCategory(iconClasses);
 
             if (
                 !category ||
-                !shouldIncludeMovement(iconClasses)
+                !(
+                    activeMovementTypes ||
+                    getSelectedMovementTypes()
+                )[category]
             ) {
                 return;
             }
@@ -1438,11 +1450,13 @@ function initRallyPointEnhancer() {
             ).replace(/\s+/g, ' ');
 
         const matches =
-            [
-                ...rawText.matchAll(
-                    waveRegex
-                )
-            ];
+            detailRows.length > 0
+                ? []
+                : [
+                    ...rawText.matchAll(
+                        waveRegex
+                    )
+                ];
 
         for (const match of matches) {
             const [

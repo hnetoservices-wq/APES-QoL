@@ -386,22 +386,6 @@ function initUnifiedRallyPointScanner() {
                 user-select: none !important;
             }
 
-            .qol-rally-movement-option::before,
-            .qol-rally-movement-option::after {
-                content: none !important;
-                display: none !important;
-                width: 0 !important;
-                height: 0 !important;
-                margin: 0 !important;
-                padding: 0 !important;
-                border: 0 !important;
-                background: none !important;
-            }
-
-            .qol-rally-movement-option input {
-                display: none !important;
-            }
-
             .qol-rally-checkbox {
                 position: relative !important;
                 display: inline-flex !important;
@@ -450,7 +434,7 @@ function initUnifiedRallyPointScanner() {
                 border-color: #604727 !important;
             }
 
-            .qol-rally-movement-option:focus-within .qol-rally-checkbox {
+            .qol-rally-movement-option:focus-visible .qol-rally-checkbox {
                 outline: 2px solid rgba(116, 89, 54, .38) !important;
                 outline-offset: 2px !important;
             }
@@ -657,11 +641,17 @@ function initUnifiedRallyPointScanner() {
                 '[data-qol-rally-movement-type]'
             )
             .forEach((checkbox) => {
-                checkbox.nextElementSibling
+                checkbox.querySelector(
+                    '.qol-rally-checkbox'
+                )
                     ?.classList.toggle(
                         'checked',
                         checkbox.checked === true
                     );
+                checkbox.setAttribute(
+                    'aria-checked',
+                    checkbox.checked ? 'true' : 'false'
+                );
                 selectedTypes[
                     checkbox.getAttribute(
                         'data-qol-rally-movement-type'
@@ -726,16 +716,16 @@ function initUnifiedRallyPointScanner() {
                 ['raid', 'Raid'],
                 ['reinforcement', 'Reinforcements']
             ].map(([type, label]) => `
-                <label class="qol-rally-movement-option">
-                    <input
-                        type="checkbox"
-                        style="display: none !important;"
-                        data-qol-rally-movement-type="${type}"
-                        ${selectedTypes[type] ? 'checked' : ''}
-                    >
+                <div
+                    class="qol-rally-movement-option"
+                    data-qol-rally-movement-type="${type}"
+                    role="checkbox"
+                    aria-checked="${selectedTypes[type] ? 'true' : 'false'}"
+                    tabindex="0"
+                >
                     <span class="qol-rally-checkbox${selectedTypes[type] ? ' checked' : ''}" aria-hidden="true"></span>
                     <span>${label}</span>
-                </label>
+                </div>
             `).join('')}
             <span class="qol-rally-movement-warning">
                 Select at least one type.
@@ -752,13 +742,47 @@ function initUnifiedRallyPointScanner() {
             controls || null
         );
 
-        picker.addEventListener(
-            'change',
-            () => {
-                updateMovementPickerState(
-                    picker
+        picker
+            .querySelectorAll(
+                '[data-qol-rally-movement-type]'
+            )
+            .forEach((control) => {
+                const type = control.getAttribute(
+                    'data-qol-rally-movement-type'
                 );
-            }
+
+                control.checked =
+                    selectedTypes[type] === true;
+
+                const toggleControl = () => {
+                    control.checked =
+                        !control.checked;
+
+                    updateMovementPickerState(
+                        picker
+                    );
+                };
+
+                control.addEventListener(
+                    'click',
+                    toggleControl
+                );
+                control.addEventListener(
+                    'keydown',
+                    (event) => {
+                        if (
+                            event.key === 'Enter' ||
+                            event.key === ' '
+                        ) {
+                            event.preventDefault();
+                            toggleControl();
+                        }
+                    }
+                );
+            });
+
+        updateMovementPickerState(
+            picker
         );
 
         const parseButton =
